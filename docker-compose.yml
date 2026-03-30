@@ -1,15 +1,6 @@
 version: "3.8"
 
 services:
-  mongodb:
-    image: mongo:7
-    container_name: campus-mongodb
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
-    restart: always
-
   redis:
     image: redis:7-alpine
     container_name: campus-redis
@@ -39,6 +30,3 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     restart: always
-
-volumes:
-  mongo-data:
