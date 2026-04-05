@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = "http://localhost:4000";
+const BASE_URL = "http://localhost:5003"; 
 
 export const getResources = () =>
   axios.get(`${BASE_URL}/resources`);

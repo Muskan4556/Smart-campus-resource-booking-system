@@ -3,14 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { getResources } from "../services/resourceService";
 import { bookResource } from "../services/bookingService";
 
-// Fetch user bookings — adjust URL to match your API base
 const getUserBookings = (userId, token) =>
-  fetch(`http://localhost:5000/bookings/user/${userId}`, {
+  fetch(`http://localhost:5003/booking/user/${userId}`, {
     headers: { Authorization: `Bearer ${token}`, role: "user" },
   }).then((r) => r.json());
 
 const deleteBooking = (id, token) =>
-  fetch(`http://localhost:5000/bookings/${id}`, {
+  fetch(`http://localhost:5003/booking/${id}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}`, role: "user" },
   }).then((r) => r.json());
@@ -62,36 +61,36 @@ export default function BookingPage() {
   }, [userId, success]); // refetch after new booking
 
   const handleBooking = async (e) => {
-    e.preventDefault();
-    setError("");
-    setSuccess(false);
+  e.preventDefault();
+  setError("");
+  setSuccess(false);
 
-    if (!selectedResource || !date || !startTime || !endTime) {
-      setError("Please fill in all reservation fields.");
-      return;
-    }
-    if (startTime >= endTime) {
-      setError("End time must be after start time.");
-      return;
-    }
+  if (!selectedResource || !date || !startTime || !endTime) {
+    setError("Please fill in all reservation fields.");
+    return;
+  }
+  if (startTime >= endTime) {
+    setError("End time must be after start time.");
+    return;
+  }
 
-    setLoading(true);
-    try {
-      await bookResource(
-        { userId, resourceId: selectedResource, date, startTime, endTime },
-        token
-      );
-      setSuccess(true);
-      setSelectedResource("");
-      setDate("");
-      setStartTime("");
-      setEndTime("");
-    } catch (err) {
-      setError("Booking failed: " + (err.response?.data?.message || err.message));
-    } finally {
-      setLoading(false);
-    }
-  };
+  setLoading(true);
+  try {
+    await bookResource(
+      { userId, resourceId: selectedResource, date, startTime, endTime },
+      token
+    );
+    setSuccess(true);
+    setSelectedResource("");
+    setDate("");
+    setStartTime("");
+    setEndTime("");
+  } catch (err) {
+    setError("Booking failed: " + (err.response?.data?.message || err.message));
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleDelete = async (id) => {
     setDeletingId(id);
