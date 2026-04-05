@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = "http://localhost:4000"; // backend URL
+const BASE_URL = "http://127.0.0.1:4000";
 
 export const signup = (user) =>
   axios.post(`${BASE_URL}/auth/register`, user);
