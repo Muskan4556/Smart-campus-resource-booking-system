@@ -43,10 +43,22 @@ await booking.save();
 try {
   await producer.connect();
 
+  // ✅ create event data FIRST
+  const eventData = {
+    userId: booking.userId,
+    userEmail: req.body.userEmail || "test@gmail.com",
+    userName: req.body.userName || "Test User",
+    resourceName: req.body.resourceName || "Lab",
+    date: booking.date,
+    startTime: booking.startTime,
+    endTime: booking.endTime
+  };
+
+  // ✅ send event ONCE
   await producer.send({
-    topic: 'booking-topic',
+    topic: 'booking-created',
     messages: [
-      { value: JSON.stringify(booking) }
+      { value: JSON.stringify(eventData) }
     ]
   });
 
