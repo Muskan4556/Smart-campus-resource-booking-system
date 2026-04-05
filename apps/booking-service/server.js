@@ -1,39 +1,31 @@
 const express = require("express");
 const mongoose = require("mongoose");
 
+// ✅ LOAD ENV FILE (VERY IMPORTANT)
 require('dotenv').config({ path: '../../.env' });
 
 const bookingRoutes = require("./routes/bookingRoutes");
-const resourceRoutes = require("./routes/resourceRoutes"); // ✅ ADDED
 
 const app = express();
 
-// ✅ Middleware
+// middleware
 app.use(express.json());
 
-// ✅ MongoDB connection
-mongoose.connect("mongodb://localhost:27017/booking-service")
-.then(() => {
-    console.log("MongoDB Connected");
-})
-.catch((err) => {
-    console.log("MongoDB Connection Error:", err);
-});
+// ✅ CONNECT TO MONGODB USING .env
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB Connected"))
+  .catch(err => console.log("MongoDB Error:", err));
 
-// ✅ Test route
+// test route
 app.get("/", (req, res) => {
-    res.send("Booking Service Running");
+  res.send("Booking Service Running");
 });
 
-// ✅ Booking routes (existing)
+// ✅ IMPORTANT CHANGE HERE
 app.use("/booking", bookingRoutes);
 
-// ✅ Resource routes (NEW - ADMIN)
-app.use("/api/resources", resourceRoutes);
-
-// ✅ Start server
 const PORT = 5003;
 
 app.listen(PORT, () => {
-    console.log(`Booking Service running on port ${PORT}`);
+  console.log(`Booking Service running on port ${PORT}`);
 });
