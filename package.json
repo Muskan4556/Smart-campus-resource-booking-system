@@ -15,5 +15,19 @@
     "dotenv": "^17.4.0",
     "ioredis": "^5.10.0",
     "kafkajs": "^2.2.4"
-  }
+  },
+  "description": "",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Muskan4556/Smart-campus-resource-booking-system.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Muskan4556/Smart-campus-resource-booking-system/issues"
+  },
+  "homepage": "https://github.com/Muskan4556/Smart-campus-resource-booking-system#readme"
 }
