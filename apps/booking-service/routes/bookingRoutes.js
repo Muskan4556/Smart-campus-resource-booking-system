@@ -2,6 +2,15 @@ const express = require("express");
 const router = express.Router();
 const Booking = require("../models/Booking");
 
+const { Kafka } = require('kafkajs');
+
+const kafka = new Kafka({
+  clientId: 'booking-service',
+  brokers: ['localhost:9092'] // same as .env
+});
+
+const producer = kafka.producer();
+
 router.post("/book", async (req,res)=>{
 
 const {userId, resourceId, date, startTime, endTime} = req.body;
@@ -30,6 +39,22 @@ endTime
 });
 
 await booking.save();
+
+try {
+  await producer.connect();
+
+  await producer.send({
+    topic: 'booking-topic',
+    messages: [
+      { value: JSON.stringify(booking) }
+    ]
+  });
+
+  console.log("Kafka event sent");
+
+} catch (err) {
+  console.log("Kafka not running, skipping...");
+}
 
 res.json({
 message:"Booking successful",
