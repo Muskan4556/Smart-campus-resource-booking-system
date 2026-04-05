@@ -12,7 +12,7 @@ const app = express();
 app.use(express.json());
 
 // ✅ CONNECT TO MONGODB USING .env
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGO_URI, { dbName: "campus-booking" })
   .then(() => console.log("MongoDB Connected"))
   .catch(err => console.log("MongoDB Error:", err));
 
