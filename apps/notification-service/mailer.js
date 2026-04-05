@@ -1,7 +1,6 @@
 const nodemailer = require("nodemailer");
 
-// SMTP_ENABLED=true in .env activates real email sending.
-// Anything else (false, missing) uses simulation/console mode.
+/* True only when SMTP_ENABLED=true is set in .env */
 const SMTP_CONFIGURED = process.env.SMTP_ENABLED === "true";
 
 const transporter = SMTP_CONFIGURED
@@ -16,20 +15,9 @@ const transporter = SMTP_CONFIGURED
     })
   : null;
 
-/**
- * Sends a booking confirmation email (or simulates one if SMTP is not configured).
- *
- * @param {Object} booking
- * @param {string} booking.userId
- * @param {string} booking.userEmail
- * @param {string} booking.userName
- * @param {string} booking.resourceName
- * @param {string} booking.date
- * @param {string} booking.startTime
- * @param {string} booking.endTime
- */
 async function sendBookingConfirmation(booking) {
-  const { userEmail, userName, resourceName, date, startTime, endTime } = booking;
+  const { userEmail, userName, resourceName, date, startTime, endTime } =
+    booking;
 
   const subject = `Booking Confirmed — ${resourceName}`;
 
