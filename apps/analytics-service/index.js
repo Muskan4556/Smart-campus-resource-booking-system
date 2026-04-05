@@ -18,8 +18,7 @@ app.use(express.json());
 app.use("/api/analytics", analyticsRoutes);
 
 async function start() {
-  console.log(" -------------------------------------------------");
-  console.log("  SmartCampus — Analytics Service");
+  console.log("SmartCampus    : Analytics Service");
   console.log(`  Port         : ${PORT}`);
   console.log(
     `  Kafka Broker : ${process.env.KAFKA_BROKER || "localhost:9092"}`,
@@ -28,12 +27,10 @@ async function start() {
 
   await mongoose.connect(process.env.MONGO_URI, { dbName: "campus-analytics" });
   console.log("Server: Connected to MongoDB Atlas → campus-analytics");
-  console.log(" -------------------------------------------------");
 
   await startConsumer();
 
   app.listen(PORT, () => {
-    console.log(" -------------------------------------------------");
     console.log(`App: Analytics service running on port ${PORT}`);
     console.log(`App: GET http://localhost:${PORT}/api/analytics/peak-hours\n`);
   });

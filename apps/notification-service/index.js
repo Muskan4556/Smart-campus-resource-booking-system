@@ -5,9 +5,7 @@ require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 const { startConsumer, stopConsumer } = require("./consumer");
 
 async function main() {
-  console.log("");
-  console.log("  SmartCampus — Notification Service");
-  console.log("");
+  console.log("SmartCampus    : Notification Service");
   console.log(
     `  Kafka Broker : ${process.env.KAFKA_BROKER || "localhost:9092"}`,
   );

@@ -1,4 +1,4 @@
-const { Kafka } = require("kafkajs");
+const { Kafka, logLevel } = require("kafkajs");
 const AnalyticsBooking = require("./models/AnalyticsBooking");
 
 const KAFKA_BROKER = process.env.KAFKA_BROKER || "localhost:9092";
@@ -8,6 +8,7 @@ const GROUP_ID = "analytics-service-group";
 const kafka = new Kafka({
   clientId: "analytics-service",
   brokers: [KAFKA_BROKER],
+  logLevel: logLevel.ERROR,
   retry: {
     initialRetryTime: 3000,
     retries: 10,
@@ -26,14 +27,12 @@ const consumer = kafka.consumer({
  */
 async function startConsumer() {
   await consumer.connect();
-  console.log(" -------------------------------------------------");
   console.log(`Analytics Consumer: ${KAFKA_BROKER} Connected to Kafka`);
 
   await consumer.subscribe({ topic: TOPIC, fromBeginning: true });
   console.log(
     `Analytics Consumer: ${KAFKA_BROKER} Subscribed to topic: "${TOPIC}"`,
   );
-  console.log(" -------------------------------------------------");
 
   await consumer.run({
     eachMessage: async ({ partition, message }) => {
