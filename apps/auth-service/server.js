@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
@@ -17,11 +18,6 @@ mongoose.connect("mongodb://localhost:27017/campus")
 app.use("/auth", authRoutes);
 
 // GET users route
-app.get("/auth/users", async (req, res) => {
-  const users = await User.find();
-  res.json(users);
-});
-
 app.get("/auth/users", async (req, res) => {
   const users = await User.find().select("-password");
   res.json(users);
