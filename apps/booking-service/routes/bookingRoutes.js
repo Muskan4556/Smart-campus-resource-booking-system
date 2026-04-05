@@ -6,10 +6,15 @@ const { Kafka } = require('kafkajs');
 
 const kafka = new Kafka({
   clientId: 'booking-service',
-  brokers: ['localhost:9092'] // same as .env
+  brokers: ['localhost:9092']
 });
 
 const producer = kafka.producer();
+
+// ✅ CONNECT KAFKA ONLY ONCE (MOVE HERE)
+producer.connect()
+  .then(() => console.log("Kafka Producer Connected"))
+  .catch(err => console.log("Kafka Connection Error:", err));
 
 router.post("/book", async (req,res)=>{
 
@@ -41,21 +46,19 @@ endTime
 await booking.save();
 
 try {
-  await producer.connect();
 
-  // ✅ create event data FIRST
- const eventData = {
-  bookingId: booking._id.toString(),
-  userId: booking.userId,
-  resourceId: booking.resourceId,
-  resourceName: req.body.resourceName || "Unknown",
-  date: booking.date,
-  startTime: booking.startTime,
-  endTime: booking.endTime,
-  userEmail: req.body.userEmail || "test@gmail.com",
-  userName: req.body.userName || "Test User"
-};
-  // ✅ send event ONCE
+  const eventData = {
+    bookingId: booking._id.toString(),
+    userId: booking.userId,
+    resourceId: booking.resourceId,
+    resourceName: req.body.resourceName || "Unknown",
+    date: booking.date,
+    startTime: booking.startTime,
+    endTime: booking.endTime,
+    userEmail: req.body.userEmail || "test@gmail.com",
+    userName: req.body.userName || "Test User"
+  };
+
   await producer.send({
     topic: 'booking-created',
     messages: [
@@ -76,17 +79,19 @@ booking
 
 });
 
-//NEW GET API
+// GET ALL BOOKINGS
 router.get("/", async (req,res)=>{
 const bookings = await Booking.find();
 res.json(bookings);
 });
 
+// GET USER BOOKINGS
 router.get("/user/:userId", async (req,res)=>{
 const bookings = await Booking.find({userId:req.params.userId});
 res.json(bookings);
 });
 
+// DELETE BOOKING
 router.delete("/:id", async (req,res)=>{
 
 try{
