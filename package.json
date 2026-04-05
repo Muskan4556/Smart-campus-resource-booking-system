@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "apps/*"
+    "apps/auth-service",
+    "apps/booking-service",
+    "apps/resource-service"
   ],
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",

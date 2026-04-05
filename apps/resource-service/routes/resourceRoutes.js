@@ -2,63 +2,37 @@ const express = require("express");
 const router = express.Router();
 const Resource = require("../models/Resource");
 
-// ✅ SIMPLE ADMIN CHECK (PLACEHOLDER)
+// ADMIN CHECK
 const isAdmin = (req, res, next) => {
   const role = req.headers.role;
-
-  if (role !== "admin") {
-    return res.status(403).json({ message: "Access denied: Admin only" });
-  }
-
+  if (role !== "admin") return res.status(403).json({ message: "Access denied: Admin only" });
   next();
 };
 
-
-
-// ✅ ADD RESOURCE (ADMIN ONLY)
+// ADD RESOURCE
 router.post("/add", isAdmin, async (req, res) => {
   try {
     const { resourceId, resourceName, capacity, location } = req.body;
 
-    // VALIDATION
-    if (!resourceId || !resourceName || !capacity) {
+    if (!resourceId || !resourceName || !capacity)
       return res.status(400).json({ message: "All required fields must be filled" });
-    }
 
-    if (capacity <= 0) {
-      return res.status(400).json({ message: "Capacity must be greater than 0" });
-    }
+    if (capacity <= 0) return res.status(400).json({ message: "Capacity must be greater than 0" });
 
-    // CHECK DUPLICATE
     const existing = await Resource.findOne({ resourceId });
+    if (existing) return res.status(400).json({ message: "Resource already exists" });
 
-    if (existing) {
-      return res.status(400).json({ message: "Resource already exists" });
-    }
-
-    const resource = new Resource({
-      resourceId,
-      resourceName,
-      capacity,
-      location
-    });
-
+    const resource = new Resource({ resourceId, resourceName, capacity, location });
     await resource.save();
 
-    res.json({
-      message: "Resource added successfully",
-      resource
-    });
-
+    res.json({ message: "Resource added successfully", resource });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error adding resource" });
   }
 });
 
-
-
-// ✅ GET ALL RESOURCES (PUBLIC)
+// GET ALL RESOURCES
 router.get("/", async (req, res) => {
   try {
     const resources = await Resource.find();
@@ -69,56 +43,32 @@ router.get("/", async (req, res) => {
   }
 });
 
-
-
-// ✅ UPDATE RESOURCE (ADMIN ONLY)  ⭐ NEW
+// UPDATE RESOURCE
 router.put("/:id", isAdmin, async (req, res) => {
   try {
     const { resourceName, capacity, location } = req.body;
+    if (capacity && capacity <= 0) return res.status(400).json({ message: "Capacity must be >0" });
 
-    if (capacity && capacity <= 0) {
-      return res.status(400).json({ message: "Capacity must be greater than 0" });
-    }
+    const updated = await Resource.findByIdAndUpdate(req.params.id, { resourceName, capacity, location }, { new: true });
+    if (!updated) return res.status(404).json({ message: "Resource not found" });
 
-    const updated = await Resource.findByIdAndUpdate(
-      req.params.id,
-      { resourceName, capacity, location },
-      { new: true }
-    );
-
-    if (!updated) {
-      return res.status(404).json({ message: "Resource not found" });
-    }
-
-    res.json({
-      message: "Resource updated successfully",
-      updated
-    });
-
+    res.json({ message: "Resource updated successfully", updated });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error updating resource" });
   }
 });
 
-
-
-// ✅ DELETE RESOURCE (ADMIN ONLY)
+// DELETE RESOURCE
 router.delete("/:id", isAdmin, async (req, res) => {
   try {
     const resource = await Resource.findByIdAndDelete(req.params.id);
-
-    if (!resource) {
-      return res.status(404).json({ message: "Resource not found" });
-    }
-
+    if (!resource) return res.status(404).json({ message: "Resource not found" });
     res.json({ message: "Resource deleted successfully" });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error deleting resource" });
   }
 });
-
 
 module.exports = router;

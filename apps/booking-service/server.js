@@ -1,31 +1,38 @@
-const express = require("express");
-const mongoose = require("mongoose");
+// apps/booking-service/server.js
 
 // ✅ LOAD ENV FILE (VERY IMPORTANT)
-require('dotenv').config({ path: '../../.env' });
+require("dotenv").config({ path: "../../.env" });
+
+const express = require("express");
+const mongoose = require("mongoose");
 
 const bookingRoutes = require("./routes/bookingRoutes");
 
 const app = express();
 
-// middleware
+// ✅ MIDDLEWARE
 app.use(express.json());
 
-// ✅ CONNECT TO MONGODB USING .env
-mongoose.connect(process.env.MONGO_URI, { dbName: "campus-booking" })
-  .then(() => console.log("MongoDB Connected"))
-  .catch(err => console.log("MongoDB Error:", err));
+// ✅ CONNECT TO MONGODB
+mongoose
+  .connect(process.env.MONGO_URI, {
+    dbName: "campus-booking", // your DB name
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("MongoDB Connected ✅"))
+  .catch((err) => console.error("MongoDB Error ❌:", err));
 
-// test route
+// ✅ TEST ROUTE
 app.get("/", (req, res) => {
-  res.send("Booking Service Running");
+  res.send("Booking Service Running ✅");
 });
 
-// ✅ IMPORTANT CHANGE HERE
+// ✅ ROUTES
 app.use("/booking", bookingRoutes);
 
-const PORT = 5003;
-
+// ✅ START SERVER
+const PORT = process.env.PORT || 5003;
 app.listen(PORT, () => {
-  console.log(`Booking Service running on port ${PORT}`);
+  console.log(`Booking Service running on port ${PORT} 🚀`);
 });
