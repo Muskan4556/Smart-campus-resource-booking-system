@@ -5,7 +5,7 @@
  * and triggers email notifications for each booking event.
  */
 
-const { Kafka } = require("kafkajs");
+const { Kafka, logLevel } = require("kafkajs");
 const { sendBookingConfirmation } = require("./mailer");
 
 const KAFKA_BROKER = process.env.KAFKA_BROKER || "localhost:9092";
@@ -15,6 +15,7 @@ const GROUP_ID = "notification-service-group";
 const kafka = new Kafka({
   clientId: "notification-service",
   brokers: [KAFKA_BROKER],
+  logLevel: logLevel.ERROR,
   retry: {
     initialRetryTime: 3000,
     retries: 10,
