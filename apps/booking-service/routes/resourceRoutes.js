@@ -3,8 +3,21 @@ const router = express.Router();
 const Resource = require("../models/Resource");
 
 
-// ✅ ADD RESOURCE (ADMIN)
-router.post("/add", async (req, res) => {
+// ✅ SIMPLE ADMIN CHECK (PLACEHOLDER)
+// Later your teammate can replace with JWT middleware
+const isAdmin = (req, res, next) => {
+  const role = req.headers.role;
+
+  if (role !== "admin") {
+    return res.status(403).json({ message: "Access denied: Admin only" });
+  }
+
+  next();
+};
+
+
+// ✅ ADD RESOURCE (ADMIN ONLY)
+router.post("/add", isAdmin, async (req, res) => {
   try {
 
     const { resourceId, resourceName, capacity, location } = req.body;
@@ -40,24 +53,26 @@ router.post("/add", async (req, res) => {
     });
 
   } catch (error) {
+    console.error(error); // DEBUG
     res.status(500).json({ message: "Error adding resource" });
   }
 });
 
 
-// ✅ GET ALL RESOURCES
+// ✅ GET ALL RESOURCES (PUBLIC)
 router.get("/", async (req, res) => {
   try {
     const resources = await Resource.find();
     res.json(resources);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Error fetching resources" });
   }
 });
 
 
-// ✅ DELETE RESOURCE
-router.delete("/:id", async (req, res) => {
+// ✅ DELETE RESOURCE (ADMIN ONLY)
+router.delete("/:id", isAdmin, async (req, res) => {
   try {
 
     const resource = await Resource.findByIdAndDelete(req.params.id);
@@ -69,6 +84,7 @@ router.delete("/:id", async (req, res) => {
     res.json({ message: "Resource deleted successfully" });
 
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Error deleting resource" });
   }
 });
