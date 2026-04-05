@@ -44,16 +44,17 @@ try {
   await producer.connect();
 
   // ✅ create event data FIRST
-  const eventData = {
-    userId: booking.userId,
-    userEmail: req.body.userEmail || "test@gmail.com",
-    userName: req.body.userName || "Test User",
-    resourceName: req.body.resourceName || "Lab",
-    date: booking.date,
-    startTime: booking.startTime,
-    endTime: booking.endTime
-  };
-
+ const eventData = {
+  bookingId: booking._id.toString(),
+  userId: booking.userId,
+  resourceId: booking.resourceId,
+  resourceName: req.body.resourceName || "Unknown",
+  date: booking.date,
+  startTime: booking.startTime,
+  endTime: booking.endTime,
+  userEmail: req.body.userEmail || "test@gmail.com",
+  userName: req.body.userName || "Test User"
+};
   // ✅ send event ONCE
   await producer.send({
     topic: 'booking-created',
