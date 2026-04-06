@@ -11,11 +11,21 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// MongoDB connection
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+// ✅ MongoDB connection using async/await
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      dbName: "campus-analytics"
+    });
+    console.log("MongoDB connected to campus-analytics");
+  } catch (err) {
+    console.error("MongoDB connection error:", err);
+    process.exit(1); // exit if DB fails
+  }
+};
+
+// Call DB connection
+connectDB();
 
 // Routes
 app.use("/resources", resourceRoutes);
