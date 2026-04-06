@@ -17,6 +17,8 @@ export default function Login() {
   try {
     const res = await login({ email, password });
 
+    console.log("FULL BACKEND RESPONSE:", res.data);
+
     const role = res.data.role || res.data.user?.role || "user";
 
     localStorage.setItem("token",  res.data.token);
