@@ -15,9 +15,9 @@ app.use(express.json());
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {
-      dbName: "campus-analytics"
+      dbName: "campus-resource"
     });
-    console.log("MongoDB connected to campus-analytics");
+    console.log("MongoDB connected to campus-resource");
   } catch (err) {
     console.error("MongoDB connection error:", err);
     process.exit(1); // exit if DB fails
