@@ -38,6 +38,17 @@ exports.getResources = async (req, res) => {
     }
 };
 
+// Get single resource by ID (public)
+exports.getResourceById = async (req, res) => {
+  try {
+    const resource = await Resource.findById(req.params.id);
+    if (!resource) return res.status(404).json({ message: "Resource not found" });
+    res.json(resource);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 // Update resource (admin only)
 exports.updateResource = async (req, res) => {
     try {

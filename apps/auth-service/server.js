@@ -42,6 +42,16 @@ app.get("/auth/users", async (req, res) => {
   res.json(users);
 });
 
+app.get("/auth/users/:id", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select("-password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 app.listen(4000, () => {
   console.log("Auth service running on port 4000");
 });

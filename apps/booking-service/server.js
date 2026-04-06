@@ -1,6 +1,6 @@
 // apps/booking-service/server.js
 
-require("dotenv").config({ path: "../../.env" });
+require("dotenv").config({ path: require("path").resolve(__dirname, "../../.env") });
 
 const express = require("express");
 const mongoose = require("mongoose");
@@ -12,9 +12,9 @@ const app = express();
 
 // ✅ MIDDLEWARE
 app.use(cors({
-  origin: "http://localhost:5173", // ✅ Change this from 3000 to 5173
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
+  origin: ["http://localhost:5173", "http://localhost:3000"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "role"],
 }));
 app.use(express.json());
 

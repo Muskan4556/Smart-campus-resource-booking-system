@@ -73,12 +73,14 @@ exports.login = async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    res.status(200).json({ 
-  message: "Login successful", 
-  token, 
-  role: user.role, 
-  userId: user._id  // Add this line!
-});
+    res.status(200).json({
+      message: "Login successful",
+      token,
+      role: user.role,
+      userId: user._id,
+      email: user.email,
+      name: user.name,
+    });
 
   } catch (error) {
     res.status(500).json(error.message);

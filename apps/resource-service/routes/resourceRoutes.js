@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const {
     addResource,
     getResources,
+    getResourceById,
     updateResource,
     deleteResource
 } = require("../controllers/resourceController");
@@ -36,6 +37,7 @@ const isAdmin = (req, res, next) => {
 // Routes
 router.post("/add", isAdmin, addResource);
 router.get("/", getResources);
+router.get("/:id", getResourceById);
 router.put("/:id", isAdmin, updateResource);
 router.delete("/:id", isAdmin, deleteResource);
 

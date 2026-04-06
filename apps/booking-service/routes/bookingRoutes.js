@@ -1,6 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const Booking = require("../models/Booking");
+const axios = require("axios");
+
+const AUTH_SERVICE_URL     = process.env.AUTH_SERVICE_URL     || "http://localhost:4000";
+const RESOURCE_SERVICE_URL = process.env.RESOURCE_SERVICE_URL || "http://localhost:5002";
 
 // ------------------- KAFKA SETUP -------------------
 const { Kafka } = require('kafkajs');
@@ -65,30 +69,38 @@ const booking = new Booking({
 await booking.save();
 
 // ------------------- REDIS CACHE CLEAR -------------------
-await redisClient.del(`userBookings:${booking.userId}`);
-await redisClient.del(`availability:${booking.resourceId}:${booking.date}`);
+try {
+  await redisClient.del(`userBookings:${booking.userId}`);
+  await redisClient.del(`availability:${booking.resourceId}:${booking.date}`);
+} catch (_) {}
 
 
 // ------------------- KAFKA EVENT -------------------
 try {
 
+  const [userRes, resourceRes] = await Promise.allSettled([
+    axios.get(`${AUTH_SERVICE_URL}/auth/users/${booking.userId}`),
+    axios.get(`${RESOURCE_SERVICE_URL}/resources/${booking.resourceId}`)
+  ]);
+
+  const user     = userRes.status     === "fulfilled" ? userRes.value.data     : {};
+  const resource = resourceRes.status === "fulfilled" ? resourceRes.value.data : {};
+
   const eventData = {
-    bookingId: booking._id.toString(),
-    userId: booking.userId,
-    resourceId: booking.resourceId,
-    resourceName: req.body.resourceName || "Unknown",
-    date: booking.date,
-    startTime: booking.startTime,
-    endTime: booking.endTime,
-    userEmail: req.body.userEmail || "test@gmail.com",
-    userName: req.body.userName || "Test User"
+    bookingId:    booking._id.toString(),
+    userId:       booking.userId,
+    resourceId:   booking.resourceId,
+    resourceName: resource.resourceName || req.body.resourceName || "",
+    date:         booking.date,
+    startTime:    booking.startTime,
+    endTime:      booking.endTime,
+    userEmail:    user.email    || req.body.userEmail || "",
+    userName:     user.name     || req.body.userName  || "",
   };
 
   await producer.send({
     topic: 'booking-created',
-    messages: [
-      { value: JSON.stringify(eventData) }
-    ]
+    messages: [{ value: JSON.stringify(eventData) }]
   });
 
   console.log("Kafka event sent");
@@ -103,7 +115,8 @@ res.json({
 });
 
 }catch(error){
-  res.status(500).json({message:"Error creating booking"});
+  console.log("Booking creation error:", error.message, error.stack);
+  res.status(500).json({message:"Error creating booking", error: error.message});
 }
 
 });
@@ -124,20 +137,21 @@ try{
 const key = `userBookings:${req.params.userId}`;
 
 // check cache
-const cached = await redisClient.get(key);
-
-if(cached){
-  console.log("From Redis");
-  return res.json(JSON.parse(cached));
-}
+try {
+  const cached = await redisClient.get(key);
+  if (cached) {
+    console.log("From Redis");
+    return res.json(JSON.parse(cached));
+  }
+} catch (_) {}
 
 // fetch from DB
 const bookings = await Booking.find({userId:req.params.userId});
 
 // store in Redis (5 mins)
-await redisClient.set(key, JSON.stringify(bookings), {
-  EX: 300
-});
+try {
+  await redisClient.set(key, JSON.stringify(bookings), { EX: 300 });
+} catch (_) {}
 
 res.json(bookings);
 
@@ -173,7 +187,9 @@ if(!booking){
 }
 
 // clear cache
-await redisClient.del(`userBookings:${booking.userId}`);
+try {
+  await redisClient.del(`userBookings:${booking.userId}`);
+} catch (_) {}
 
 res.json({message:"Booking deleted successfully"});
 

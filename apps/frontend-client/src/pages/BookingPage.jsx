@@ -80,8 +80,10 @@ export default function BookingPage() {
   const location = useLocation();
 
   // ── Read auth from localStorage; redirect immediately if missing ──────────
-  const token  = localStorage.getItem("token");
-  const userId = localStorage.getItem("userId");
+  const token     = localStorage.getItem("token");
+  const userId    = localStorage.getItem("userId");
+  const userEmail = localStorage.getItem("email") || "";
+  const userName  = localStorage.getItem("name")  || "";
 
   useEffect(() => {
     if (!token || !userId) {
@@ -220,12 +222,16 @@ export default function BookingPage() {
     try {
       // Payload matches exactly what bookingRoute.js destructures:
       // { userId, resourceId, date, startTime, endTime }
+      const selectedRes = resources.find(r => String(r._id) === String(selectedResource));
       const payload = {
         userId,
         resourceId: selectedResource,
         date,
         startTime,
         endTime,
+        userEmail,
+        userName,
+        resourceName: selectedRes?.resourceName || "",
       };
 
       await bookResource(payload, token);

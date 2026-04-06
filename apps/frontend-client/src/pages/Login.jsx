@@ -24,6 +24,8 @@ export default function Login() {
     localStorage.setItem("token",  res.data.token);
     localStorage.setItem("userId", res.data.userId || res.data.user?._id || "");
     localStorage.setItem("role",   role);
+    localStorage.setItem("email",  res.data.email  || res.data.user?.email || "");
+    localStorage.setItem("name",   res.data.name   || res.data.user?.name  || "");
 
     // ── Redirect based on role ──
     navigate(role === "admin" ? "/admin" : "/dashboard");
