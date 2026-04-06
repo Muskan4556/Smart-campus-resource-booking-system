@@ -31,5 +31,5 @@ connectDB();
 app.use("/resources", resourceRoutes);
 
 // Start server
-const PORT = process.env.RESOURCE_PORT || 5003;
+const PORT = process.env.RESOURCE_PORT || 5002;
 app.listen(PORT, () => console.log(`Resource service running on port ${PORT}`));
