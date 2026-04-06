@@ -1,10 +1,25 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getResources } from "../services/resourceService";
-import { bookResource } from "../services/bookingService";
 
 // ── API helpers ─────────────────────────────────────────────────────────────
 const API_BASE = "http://localhost:5003";
+
+// bookingRoute.js mounts POST at /booking/book
+const bookResource = (payload, token) =>
+  fetch(`${API_BASE}/booking/book`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      role: "user",
+    },
+    body: JSON.stringify(payload),
+  }).then(async (r) => {
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || "Booking failed");
+    return data;
+  });
 
 const getUserBookings = (userId, token) =>
   fetch(`${API_BASE}/booking/user/${userId}`, {
@@ -25,8 +40,9 @@ const deleteBooking = (id, token) =>
     return data;
   });
 
-// Fetch all bookings for a specific resource on a specific date
-// to check for overlaps on the client side before submitting
+// NOTE: Your bookingRoute.js does NOT have a GET /booking/resource/:resourceId route.
+// Add this to bookingRoute.js (see comment at bottom of this file), or this will
+// silently return [] and overlap preview won't work.
 const getResourceBookings = (resourceId, date, token) =>
   fetch(`${API_BASE}/booking/resource/${resourceId}?date=${date}`, {
     headers: {
@@ -35,27 +51,23 @@ const getResourceBookings = (resourceId, date, token) =>
       "Content-Type": "application/json",
     },
   }).then(async (r) => {
-    // If endpoint doesn't exist, return empty (server will enforce)
-    if (!r.ok) return [];
+    if (!r.ok) return []; // gracefully fall back if route not yet added
     const data = await r.json();
     return Array.isArray(data) ? data : [];
   });
 
 // ── Time helpers ─────────────────────────────────────────────────────────────
 
-/** Convert "HH:MM" to total minutes since midnight */
 function toMinutes(timeStr) {
   const [h, m] = timeStr.split(":").map(Number);
   return h * 60 + m;
 }
 
-/** Return true if [startA, endA) overlaps [startB, endB) */
 function timesOverlap(startA, endA, startB, endB) {
   return toMinutes(startA) < toMinutes(endB) &&
          toMinutes(endA)   > toMinutes(startB);
 }
 
-/** Format "HH:MM" → "10:00 AM" */
 function formatTime(t) {
   if (!t) return "";
   const [h, m] = t.split(":").map(Number);
@@ -64,7 +76,6 @@ function formatTime(t) {
   return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
-/** Format ISO date string or date string → "Mon, Jan 01" */
 function formatDate(d) {
   if (!d) return "";
   const date = new Date(d);
@@ -72,10 +83,20 @@ function formatDate(d) {
   return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
-/** Today's date as "YYYY-MM-DD" in local timezone */
 function todayString() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Extract "HH:MM" from either an ISO string or a plain "HH:MM" value
+function extractTime(val) {
+  if (!val) return null;
+  if (val.includes("T")) {
+    const d = new Date(val);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+  if (/^\d{2}:\d{2}/.test(val)) return val.slice(0, 5);
+  return null;
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -91,16 +112,13 @@ export default function BookingPage() {
   const [fieldErrors,      setFieldErrors]      = useState({});
   const [successMsg,       setSuccessMsg]       = useState("");
 
-  // Existing bookings
   const [bookings,        setBookings]        = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [deletingId,      setDeletingId]      = useState(null);
   const [deleteError,     setDeleteError]     = useState("");
 
-  // Overlap checking
-  const [checkingOverlap,    setCheckingOverlap]    = useState(false);
-  const [existingSlots,      setExistingSlots]      = useState([]);
-  const [slotsLoading,       setSlotsLoading]       = useState(false);
+  const [existingSlots, setExistingSlots] = useState([]);
+  const [slotsLoading,  setSlotsLoading]  = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -114,14 +132,13 @@ export default function BookingPage() {
     }
   }, [location.state]);
 
-  // Load all resources (only available ones for booking)
+  // Load available resources
   useEffect(() => {
     const fetchResources = async () => {
       setResourcesLoading(true);
       try {
         const res = await getResources();
         const data = Array.isArray(res.data) ? res.data : [];
-        // Show all resources so user can see what's available; filter available only
         setResources(data.filter(r => !r.status || r.status === "available"));
       } catch {
         setError("Failed to load resources. Please refresh the page.");
@@ -132,7 +149,7 @@ export default function BookingPage() {
     fetchResources();
   }, []);
 
-  // Load user's bookings
+  // Load user's own bookings
   const fetchMyBookings = useCallback(async () => {
     if (!userId) return;
     setBookingsLoading(true);
@@ -148,7 +165,7 @@ export default function BookingPage() {
 
   useEffect(() => { fetchMyBookings(); }, [fetchMyBookings]);
 
-  // Fetch booked slots for the selected resource + date for overlap preview
+  // Fetch booked slots for selected resource + date (for overlap preview)
   useEffect(() => {
     if (!selectedResource || !date) {
       setExistingSlots([]);
@@ -177,17 +194,14 @@ export default function BookingPage() {
       if (toMinutes(endTime) <= toMinutes(startTime)) {
         errs.endTime = "End time must be after start time.";
       }
-      // Minimum booking: 15 minutes
       if (toMinutes(endTime) - toMinutes(startTime) < 15) {
         errs.endTime = "Booking must be at least 15 minutes.";
       }
-      // Maximum booking: 8 hours
       if (toMinutes(endTime) - toMinutes(startTime) > 480) {
         errs.endTime = "Booking cannot exceed 8 hours.";
       }
     }
 
-    // Prevent same-day past time slot
     if (date === today && startTime) {
       const now = new Date();
       const nowMinutes = now.getHours() * 60 + now.getMinutes();
@@ -203,8 +217,6 @@ export default function BookingPage() {
   const checkOverlap = () => {
     if (!startTime || !endTime || !existingSlots.length) return null;
     for (const slot of existingSlots) {
-      // slot.startTime / slot.endTime may be ISO strings or "HH:MM"
-      // Extract HH:MM from whatever format the server returns
       const slotStart = extractTime(slot.startTime);
       const slotEnd   = extractTime(slot.endTime);
       if (slotStart && slotEnd && timesOverlap(startTime, endTime, slotStart, slotEnd)) {
@@ -213,18 +225,6 @@ export default function BookingPage() {
     }
     return null;
   };
-
-  function extractTime(val) {
-    if (!val) return null;
-    // ISO string → extract time part
-    if (val.includes("T")) {
-      const d = new Date(val);
-      return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-    }
-    // Already "HH:MM"
-    if (/^\d{2}:\d{2}/.test(val)) return val.slice(0, 5);
-    return null;
-  }
 
   // ── Submit handler ──────────────────────────────────────────────────────
   const handleBooking = async (e) => {
@@ -239,7 +239,6 @@ export default function BookingPage() {
       return;
     }
 
-    // Client-side overlap check (server always enforces too)
     const overlapMsg = checkOverlap();
     if (overlapMsg) {
       setError(overlapMsg);
@@ -248,6 +247,7 @@ export default function BookingPage() {
 
     setLoading(true);
     try {
+      // bookingRoute.js reads: userId, resourceId, date, startTime, endTime
       await bookResource(
         { userId, resourceId: selectedResource, date, startTime, endTime },
         token
@@ -260,9 +260,13 @@ export default function BookingPage() {
       setExistingSlots([]);
       fetchMyBookings();
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || "Booking failed.";
-      // Detect overlap error from server
-      if (msg.toLowerCase().includes("overlap") || msg.toLowerCase().includes("conflict") || msg.toLowerCase().includes("already booked")) {
+      const msg = err?.message || "Booking failed.";
+      if (
+        msg.toLowerCase().includes("overlap") ||
+        msg.toLowerCase().includes("conflict") ||
+        msg.toLowerCase().includes("already booked") ||
+        msg.toLowerCase().includes("slot already booked")   // matches bookingRoute.js exactly
+      ) {
         setError("This time slot overlaps with an existing booking. Please choose a different time.");
       } else {
         setError(msg);
@@ -293,12 +297,13 @@ export default function BookingPage() {
     navigate("/");
   };
 
+  // bookingRoute.js stores resourceId as a plain string field
   const getResourceName = (id) => {
-    const r = resources.find(x => x._id === id);
+    if (!id) return "Unknown Resource";
+    const r = resources.find(x => x._id === id || x._id?.toString() === id?.toString());
     return r ? r.resourceName : id;
   };
 
-  // ── Booked slots for the selected resource/date (for display) ────────────
   const bookedSlotsDisplay = existingSlots
     .map(s => ({ start: extractTime(s.startTime), end: extractTime(s.endTime) }))
     .filter(s => s.start && s.end)
@@ -373,7 +378,6 @@ export default function BookingPage() {
         }
         .db-header-title em { font-style: italic; color: var(--db-navy); }
 
-        /* ALERTS */
         .db-alert {
           border-radius: 2px; padding: 12px 16px; font-size: 13px;
           margin-bottom: 24px; display: flex; align-items: flex-start; gap: 8px;
@@ -384,10 +388,8 @@ export default function BookingPage() {
         .db-alert.success { background: var(--db-success-lt); border: 1px solid rgba(21,128,61,0.15); color: var(--db-success); }
         .db-alert.warning { background: var(--db-amber-lt); border: 1px solid rgba(217,119,6,0.2); color: var(--db-amber); }
 
-        /* TWO-COL LAYOUT */
         .db-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
 
-        /* FORM CARD */
         .form-card {
           background: var(--db-surface); border: 1px solid var(--db-border);
           border-radius: 4px; padding: 40px 36px;
@@ -409,7 +411,6 @@ export default function BookingPage() {
         .form-error { font-size: 11px; color: var(--db-error); display: flex; align-items: center; gap: 4px; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
-        /* SLOTS PREVIEW */
         .slots-preview {
           margin-top: -8px; margin-bottom: 20px;
           padding: 12px 14px;
@@ -439,7 +440,6 @@ export default function BookingPage() {
         .db-btn-book:hover:not(:disabled) { background: var(--db-navy-dk); transform: translateY(-1px); }
         .db-btn-book:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        /* BOOKINGS LIST */
         .bookings-card {
           background: var(--db-surface); border: 1px solid var(--db-border);
           border-radius: 4px; box-shadow: 0 12px 40px rgba(10,15,30,0.06);
@@ -536,8 +536,8 @@ export default function BookingPage() {
           <h1 className="db-header-title">Reserve a <em>Resource.</em></h1>
         </div>
 
-        {error      && <div className="db-alert error">⚠ {error}</div>}
-        {successMsg && <div className="db-alert success">✓ {successMsg}</div>}
+        {error       && <div className="db-alert error">⚠ {error}</div>}
+        {successMsg  && <div className="db-alert success">✓ {successMsg}</div>}
         {deleteError && <div className="db-alert error">⚠ {deleteError}</div>}
 
         <div className="db-layout">
@@ -563,7 +563,11 @@ export default function BookingPage() {
                   <select
                     className={`form-select${fieldErrors.resource ? " has-error" : ""}`}
                     value={selectedResource}
-                    onChange={e => { setSelectedResource(e.target.value); setFieldErrors(f => ({ ...f, resource: "" })); setError(""); }}
+                    onChange={e => {
+                      setSelectedResource(e.target.value);
+                      setFieldErrors(f => ({ ...f, resource: "" }));
+                      setError("");
+                    }}
                   >
                     <option value="">Select a resource…</option>
                     {resources.map(r => (
@@ -584,25 +588,35 @@ export default function BookingPage() {
                   className={`form-input${fieldErrors.date ? " has-error" : ""}`}
                   value={date}
                   min={today}
-                  onChange={e => { setDate(e.target.value); setFieldErrors(f => ({ ...f, date: "" })); setError(""); }}
+                  onChange={e => {
+                    setDate(e.target.value);
+                    setFieldErrors(f => ({ ...f, date: "" }));
+                    setError("");
+                  }}
                 />
                 {fieldErrors.date && <span className="form-error">⚠ {fieldErrors.date}</span>}
               </div>
 
-              {/* Booked slots preview — shown when resource + date selected */}
+              {/* Booked slots preview */}
               {selectedResource && date && (
                 <div className="slots-preview">
                   <div className="slots-preview-title">
                     Already booked on this date
-                    {slotsLoading && <span style={{ marginLeft: 8 }}><div className="db-spinner sm" style={{ display: "inline-block" }} /></span>}
+                    {slotsLoading && (
+                      <span style={{ marginLeft: 8 }}>
+                        <div className="db-spinner sm" style={{ display: "inline-block" }} />
+                      </span>
+                    )}
                   </div>
                   {slotsLoading ? null : bookedSlotsDisplay.length === 0 ? (
                     <span className="slots-empty">✓ No bookings yet — all slots free!</span>
-                  ) : bookedSlotsDisplay.map((s, i) => (
-                    <span key={i} className="slot-chip">
-                      🚫 {formatTime(s.start)} – {formatTime(s.end)}
-                    </span>
-                  ))}
+                  ) : (
+                    bookedSlotsDisplay.map((s, i) => (
+                      <span key={i} className="slot-chip">
+                        🚫 {formatTime(s.start)} – {formatTime(s.end)}
+                      </span>
+                    ))
+                  )}
                 </div>
               )}
 
@@ -614,7 +628,11 @@ export default function BookingPage() {
                     type="time"
                     className={`form-input${fieldErrors.startTime ? " has-error" : ""}`}
                     value={startTime}
-                    onChange={e => { setStartTime(e.target.value); setFieldErrors(f => ({ ...f, startTime: "" })); setError(""); }}
+                    onChange={e => {
+                      setStartTime(e.target.value);
+                      setFieldErrors(f => ({ ...f, startTime: "" }));
+                      setError("");
+                    }}
                   />
                   {fieldErrors.startTime && <span className="form-error">⚠ {fieldErrors.startTime}</span>}
                 </div>
@@ -625,13 +643,17 @@ export default function BookingPage() {
                     className={`form-input${fieldErrors.endTime ? " has-error" : ""}`}
                     value={endTime}
                     min={startTime || undefined}
-                    onChange={e => { setEndTime(e.target.value); setFieldErrors(f => ({ ...f, endTime: "" })); setError(""); }}
+                    onChange={e => {
+                      setEndTime(e.target.value);
+                      setFieldErrors(f => ({ ...f, endTime: "" }));
+                      setError("");
+                    }}
                   />
                   {fieldErrors.endTime && <span className="form-error">⚠ {fieldErrors.endTime}</span>}
                 </div>
               </div>
 
-              {/* Booking duration hint */}
+              {/* Duration hint */}
               {startTime && endTime && toMinutes(endTime) > toMinutes(startTime) && (
                 <div style={{ fontSize: 12, color: "var(--db-muted)", marginBottom: 16, marginTop: -8 }}>
                   Duration: {Math.round(toMinutes(endTime) - toMinutes(startTime))} min
@@ -667,7 +689,6 @@ export default function BookingPage() {
                 <div>No bookings yet. Reserve a resource to get started.</div>
               </div>
             ) : (
-              // Sort: future first, then by date
               [...bookings]
                 .sort((a, b) => {
                   const da = a.date || "";
@@ -676,8 +697,8 @@ export default function BookingPage() {
                   return da < db ? -1 : 1;
                 })
                 .map(b => {
-                  const isPast   = b.date < today;
-                  const isToday  = b.date === today;
+                  const isPast  = b.date < today;
+                  const isToday = b.date === today;
                   const dotClass = isPast ? "past" : isToday ? "today" : "future";
                   const startStr = extractTime(b.startTime);
                   const endStr   = extractTime(b.endTime);
@@ -686,6 +707,7 @@ export default function BookingPage() {
                     <div className="booking-item" key={b._id}>
                       <div className={`booking-status-dot ${dotClass}`} />
                       <div className="booking-info">
+                        {/* resourceId is a plain string in bookingRoute.js — look it up by _id */}
                         <div className="booking-name">{getResourceName(b.resourceId)}</div>
                         <div className="booking-meta">
                           <span className="booking-date-badge">{formatDate(b.date)}</span>
@@ -694,7 +716,6 @@ export default function BookingPage() {
                             : b.date}
                         </div>
                       </div>
-                      {/* Only allow cancellation of future bookings */}
                       {!isPast && (
                         <button
                           className="btn-cancel-booking"
@@ -720,13 +741,3 @@ export default function BookingPage() {
   );
 }
 
-// Re-export extractTime for use in the component above
-function extractTime(val) {
-  if (!val) return null;
-  if (val.includes("T")) {
-    const d = new Date(val);
-    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-  }
-  if (/^\d{2}:\d{2}/.test(val)) return val.slice(0, 5);
-  return null;
-}

@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = "http://localhost:5001";
+const BASE_URL = "http://localhost:5003";
 
 export const bookResource = (booking, token) =>
   axios.post(`${BASE_URL}/booking/book`, booking, {

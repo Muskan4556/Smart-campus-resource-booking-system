@@ -147,7 +147,20 @@ res.json(bookings);
 
 });
 
-
+router.get("/resource/:resourceId", async (req, res) => {
+    try {
+      const { resourceId } = req.params;
+      const { date } = req.query;
+ 
+      const query = { resourceId };
+      if (date) query.date = date;
+ 
+     const bookings = await Booking.find(query).select("startTime endTime userId");
+     res.json(bookings);
+   } catch (error) {
+     res.status(500).json({ message: "Error fetching resource bookings" });
+   }
+ });
 // ------------------- DELETE BOOKING -------------------
 router.delete("/:id", async (req,res)=>{
 
