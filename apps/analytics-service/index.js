@@ -1,7 +1,12 @@
-const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
+/**
+ * Analytics Service
+ * Connects to MongoDB Atlas, starts the Kafka consumer,
+ * and exposes REST endpoints for booking analytics.
+ */
 
-process.env.KAFKAJS_NO_PARTITIONER_WARNING = "1";
+require("dotenv").config({
+  path: require("path").resolve(__dirname, "../../.env"),
+});
 
 const express = require("express");
 const cors = require("cors");
@@ -18,32 +23,24 @@ app.use(express.json());
 app.use("/api/analytics", analyticsRoutes);
 
 async function start() {
-  console.log("SmartCampus    : Analytics Service");
-  console.log(`  Port         : ${PORT}`);
-  console.log(
-    `  Kafka Broker : ${process.env.KAFKA_BROKER || "localhost:9092"}`,
-  );
-  console.log(`  MongoDB      : Atlas`);
-
   await mongoose.connect(process.env.MONGO_URI, { dbName: "campus-analytics" });
-  console.log("Server: Connected to MongoDB Atlas → campus-analytics");
+  console.log("Analytics: Connected to MongoDB Atlas → campus-analytics");
 
   await startConsumer();
 
   app.listen(PORT, () => {
-    console.log(`App: Analytics service running on port ${PORT}`);
-    console.log(`App: GET http://localhost:${PORT}/api/analytics/peak-hours\n`);
+    console.log(`Analytics: Running on port ${PORT}`);
+    console.log(
+      `Analytics: GET http://localhost:${PORT}/api/analytics/peak-hours\n`,
+    );
   });
 }
 
+/* Graceful shutdown on SIGINT / SIGTERM */
 async function shutdown(signal) {
-  console.log(`\n[Server] ${signal} received. Shutting down...`);
-  try {
-    await stopConsumer();
-    await mongoose.connection.close();
-  } catch (err) {
-    console.error("App: Shutdown error:", err.message);
-  }
+  console.log(`${signal} received. Shutting down...`);
+  await stopConsumer().catch(() => {});
+  await mongoose.connection.close().catch(() => {});
   process.exit(0);
 }
 
@@ -51,6 +48,6 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 start().catch((err) => {
-  console.error("App: Failed to start:", err.message);
+  console.error("Analytics: Failed to start:", err.message);
   process.exit(1);
 });

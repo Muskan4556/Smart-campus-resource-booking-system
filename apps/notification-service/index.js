@@ -1,41 +1,28 @@
-const path = require("path");
+/**
+ * Notification Service 
+ *
+ * Listens to Kafka events (e.g. booking-created) and sends
+ * email notifications to users via Nodemailer.
+ */
 
-require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
+require("dotenv").config({ path: require("path").resolve(__dirname, "../../.env") });
 
 const { startConsumer, stopConsumer } = require("./consumer");
 
-async function main() {
-  console.log("SmartCampus    : Notification Service");
-  console.log(
-    `  Kafka Broker : ${process.env.KAFKA_BROKER || "localhost:9092"}`,
-  );
-  console.log(
-    `  SMTP Active  : ${process.env.SMTP_HOST ? "Yes" : "No (simulation mode)"}`,
-  );
-  console.log("\n");
-
-  try {
-    await startConsumer();
-    console.log(
-      "App: Notification service is running. Waiting for BookingCreated events...\n",
-    );
-  } catch (err) {
-    console.error("App: Failed to start consumer:", err.message);
+/* Start the Kafka consumer */
+startConsumer()
+  .then(() => console.log("Notification service running..."))
+  .catch((err) => {
+    console.error("Failed to start consumer:", err.message);
     process.exit(1);
-  }
-}
+  });
 
+/* Graceful shutdown on SIGINT / SIGTERM */
 async function shutdown(signal) {
-  console.log(`\nApp: ${signal} received. Shutting down gracefully...`);
-  try {
-    await stopConsumer();
-  } catch (err) {
-    console.error("App: Error during shutdown:", err.message);
-  }
+  console.log(`${signal} received. Shutting down...`);
+  await stopConsumer().catch(() => {});
   process.exit(0);
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
-
-main();

@@ -10,26 +10,32 @@ export default function Login() {
   const navigate = useNavigate();
 
   const handleLogin = async () => {
-    setError("");
-    if (!email.trim())    return setError("Please enter your email.");
-    if (!password.trim()) return setError("Please enter your password.");
-    setLoading(true);
-    try {
-      const res = await login({ email, password });
-      localStorage.setItem("token",  res.data.token);
-      localStorage.setItem("userId", res.data.userId || res.data.user?._id || "");
-      localStorage.setItem("role",   res.data.role   || res.data.user?.role || "user");
-      navigate("/dashboard");
-    } catch (err) {
-      setError(
-        err.response?.data?.message ||
-        err.response?.data ||
-        "Invalid email or password. Please try again."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  setError("");
+  if (!email.trim())    return setError("Please enter your email.");
+  if (!password.trim()) return setError("Please enter your password.");
+  setLoading(true);
+  try {
+    const res = await login({ email, password });
+
+    const role = res.data.role || res.data.user?.role || "user";
+
+    localStorage.setItem("token",  res.data.token);
+    localStorage.setItem("userId", res.data.userId || res.data.user?._id || "");
+    localStorage.setItem("role",   role);
+
+    // ── Redirect based on role ──
+    navigate(role === "admin" ? "/admin" : "/dashboard");
+
+  } catch (err) {
+    setError(
+      err.response?.data?.message ||
+      err.response?.data ||
+      "Invalid email or password. Please try again."
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleKeyDown = (e) => { if (e.key === "Enter") handleLogin(); };
 

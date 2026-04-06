@@ -16,9 +16,7 @@ app.use(express.json());
 // ✅ CONNECT TO MONGODB
 mongoose
   .connect(process.env.MONGO_URI, {
-    dbName: "campus-booking", // your DB name
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
+    dbName: "campus-booking", 
   })
   .then(() => console.log("MongoDB Connected ✅"))
   .catch((err) => console.error("MongoDB Error ❌:", err));

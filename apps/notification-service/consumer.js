@@ -1,3 +1,10 @@
+/**
+ * consumer.js - Notification Service
+ *
+ * Kafka consumer that listens to the "booking-created" topic
+ * and triggers email notifications for each booking event.
+ */
+
 const { Kafka, logLevel } = require("kafkajs");
 const { sendBookingConfirmation } = require("./mailer");
 
@@ -21,10 +28,6 @@ const consumer = kafka.consumer({
   heartbeatInterval: 3000,
 });
 
-/**
- * Connects to Kafka and starts listening for BookingCreated events.
- * Returns the consumer instance so the caller can disconnect it on shutdown.
- */
 async function startConsumer() {
   await consumer.connect();
   console.log(`Consumer: Connected to Kafka broker at ${KAFKA_BROKER}`);
