@@ -12,9 +12,9 @@ const app = express();
 
 // ✅ MIDDLEWARE
 app.use(cors({
-  origin: "http://localhost:3000",     // ← your frontend URL/port
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "role"],
+  origin: "http://localhost:5173", // ✅ Change this from 3000 to 5173
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
 }));
 app.use(express.json());
 

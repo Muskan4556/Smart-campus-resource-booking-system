@@ -8,7 +8,11 @@ const resourceRoutes = require("./routes/resourceRoutes");
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: "http://localhost:5173", // Replace with your Frontend port (e.g., 3000 or 5173)
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(express.json());
 
 // ✅ MongoDB connection using async/await

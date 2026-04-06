@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
 // ── API helpers ────────────────────────────────────────────────────────────
-const RESOURCES_API = "http://localhost:5003/resources";
+const RESOURCES_API = "http://localhost:5002/resources";
 const ANALYTICS_API = "http://localhost:5004/api/analytics/peak-hours";
 
 const apiFetch = (path, opts = {}, token) =>

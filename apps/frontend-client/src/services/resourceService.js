@@ -1,9 +1,17 @@
 import axios from "axios";
 
-const BASE_URL = "http://localhost:5003"; 
+const resourceApi = axios.create({
+  baseURL: "http://localhost:5002",
+});
 
-export const getResources = () =>
-  axios.get(`${BASE_URL}/resources`);
+// Interceptor to automatically add token to every request
+resourceApi.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
-export const addResource = (resource) =>
-  axios.post(`${BASE_URL}/resources`, resource);
+export const getResources = () => resourceApi.get("/resources");
+export const addResource = (resource) => resourceApi.post("/resources", resource);
