@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const jwt = require("jsonwebtoken");
 const {
     addResource,
     getResources,
@@ -9,16 +10,27 @@ const {
 
 require('dotenv').config();
 
-// Admin middleware
+// Admin middleware — verifies JWT and checks role
 const isAdmin = (req, res, next) => {
-    const username = req.headers.username;
-    const password = req.headers.password;
+    const authHeader = req.headers.authorization;
 
-    if (username !== process.env.ADMIN_EMAIL || password !== process.env.ADMIN_PASSWORD) {
-        return res.status(403).json({ message: "Access denied: Admin only" });
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(403).json({ message: "Access denied: No token provided" });
     }
 
-    next();
+    try {
+        const token = authHeader.split(" ")[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        if (decoded.role !== "admin") {
+            return res.status(403).json({ message: "Access denied: Admin only" });
+        }
+
+        req.user = decoded;
+        next();
+    } catch (error) {
+        return res.status(403).json({ message: "Access denied: Invalid or expired token" });
+    }
 };
 
 // Routes
