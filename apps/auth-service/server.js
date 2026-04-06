@@ -2,6 +2,13 @@ require("dotenv").config({
   path: require("path").resolve(__dirname, "../../.env"),
 });
 
+console.log("Path resolves to:", require("path").resolve(__dirname, "../../.env"));
+console.log("ENV CHECK:", {
+  JWT_SECRET: process.env.JWT_SECRET ? "✓ loaded" : "✗ MISSING",
+  ADMIN_EMAIL: process.env.ADMIN_EMAIL ? "✓ loaded" : "✗ MISSING",
+  MONGO_URI:   process.env.MONGO_URI   ? "✓ loaded" : "✗ MISSING",
+});
+
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");

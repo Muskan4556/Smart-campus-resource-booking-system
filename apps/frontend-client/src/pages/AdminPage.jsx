@@ -20,10 +20,10 @@ const apiFetch = (path, opts = {}, token) =>
     return data;
   });
 
-const getResources   = (token)             => apiFetch("/", {}, token);
-const addResource    = (body, token)       => apiFetch("/add", { method: "POST", body: JSON.stringify(body) }, token);
-const deleteResource = (id, token)         => apiFetch(`/${id}`, { method: "DELETE" }, token);
-const updateResource = (id, body, token)   => apiFetch(`/${id}`, { method: "PUT", body: JSON.stringify(body) }, token);
+const getResources   = (token)           => apiFetch("/", {}, token);
+const addResource    = (body, token)     => apiFetch("/add", { method: "POST", body: JSON.stringify(body) }, token);
+const deleteResource = (id, token)       => apiFetch(`/${id}`, { method: "DELETE" }, token);
+const updateResource = (id, body, token) => apiFetch(`/${id}`, { method: "PUT", body: JSON.stringify(body) }, token);
 
 const EMPTY_FORM = { resourceId: "", resourceName: "", capacity: "", location: "" };
 
@@ -31,6 +31,7 @@ const RESOURCE_ICONS = {
   lab: "🔬", library: "📚", sport: "🏟️", auditorium: "🎭",
   equipment: "💻", default: "📋",
 };
+
 function getIcon(name = "") {
   const n = name.toLowerCase();
   if (n.includes("lab"))        return RESOURCE_ICONS.lab;
@@ -52,12 +53,13 @@ function PeakHoursChart({ peakHours }) {
         const pct = Math.round((h.bookingCount / max) * 100);
         return (
           <div key={h.timeSlot} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink2)", width: 48, flexShrink: 0, textAlign: "right" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink2)", width: 52, flexShrink: 0, textAlign: "right" }}>
               {h.timeSlot}
             </div>
             <div style={{ flex: 1, background: "var(--navy-xs)", borderRadius: 2, height: 24, overflow: "hidden" }}>
               <div style={{
-                height: "100%", width: `${pct}%`, background: i === 0 ? "var(--navy)" : "#2a4db5",
+                height: "100%", width: `${pct}%`,
+                background: i === 0 ? "var(--navy)" : "#2a4db5",
                 borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "flex-end",
                 paddingRight: 8, minWidth: 28, transition: "width 0.8s cubic-bezier(.22,1,.36,1)",
               }}>
@@ -111,94 +113,165 @@ export default function AdminPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [error,      setError]      = useState("");
-  const [toast,      setToast]      = useState("");
+  const [toast,      setToast]      = useState({ msg: "", type: "success" });
   const [showForm,   setShowForm]   = useState(false);
 
-  // Analytics state
-  const [analytics,      setAnalytics]      = useState(null);
-  const [analyticsLoad,  setAnalyticsLoad]  = useState(true);
-  const [analyticsErr,   setAnalyticsErr]   = useState("");
-  const [analyticsTime,  setAnalyticsTime]  = useState("");
+  // Analytics
+  const [analytics,     setAnalytics]     = useState(null);
+  const [analyticsLoad, setAnalyticsLoad] = useState(true);
+  const [analyticsErr,  setAnalyticsErr]  = useState("");
+  const [analyticsTime, setAnalyticsTime] = useState("");
 
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
   const role  = localStorage.getItem("role");
 
-  useEffect(() => { if (role !== "admin") navigate("/dashboard"); }, [role, navigate]);
+  useEffect(() => {
+    if (role !== "admin") navigate("/dashboard");
+  }, [role, navigate]);
 
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast({ msg: "", type: "success" }), 3500);
+  };
 
-  const fetchResources = async () => {
+  const fetchResources = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getResources(token);
       setResources(Array.isArray(data) ? data : []);
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
   const loadAnalytics = useCallback(async () => {
-    setAnalyticsLoad(true); setAnalyticsErr("");
+    setAnalyticsLoad(true);
+    setAnalyticsErr("");
     try {
       const res = await fetch(ANALYTICS_API, {
-        headers: { "Content-Type": "application/json", role: "admin", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: {
+          "Content-Type": "application/json",
+          role: "admin",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
       const json = await res.json();
       if (!json.success) throw new Error("Analytics unavailable");
       setAnalytics(json.data);
       setAnalyticsTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-    } catch (e) { setAnalyticsErr(e.message || "Failed to load analytics"); }
-    finally { setAnalyticsLoad(false); }
+    } catch (e) {
+      setAnalyticsErr(e.message || "Failed to load analytics");
+    } finally {
+      setAnalyticsLoad(false);
+    }
   }, [token]);
 
-  useEffect(() => { fetchResources(); loadAnalytics(); }, []);
+  useEffect(() => {
+    fetchResources();
+    loadAnalytics();
+  }, [fetchResources, loadAnalytics]);
 
-  const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  const handleChange = (e) => {
+    setError("");
+    setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  };
+
+  const validateForm = () => {
+    const { resourceId, resourceName, capacity } = form;
+    if (!resourceId.trim())    return "Resource ID is required.";
+    if (!resourceName.trim())  return "Resource Name is required.";
+    if (!capacity)             return "Capacity is required.";
+    if (Number(capacity) <= 0) return "Capacity must be greater than 0.";
+    if (Number(capacity) > 10000) return "Capacity seems unrealistically large.";
+    // Check duplicate resourceId when adding
+    if (!editId) {
+      const exists = resources.find(r => r.resourceId.toLowerCase() === resourceId.trim().toLowerCase());
+      if (exists) return `Resource ID "${resourceId}" already exists.`;
+    }
+    return null;
+  };
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); setError("");
-    const { resourceId, resourceName, capacity, location } = form;
-    if (!resourceId || !resourceName || !capacity) { setError("Resource ID, Name, and Capacity are required."); return; }
-    if (Number(capacity) <= 0) { setError("Capacity must be greater than 0."); return; }
+    e.preventDefault();
+    setError("");
+    const validationError = validateForm();
+    if (validationError) { setError(validationError); return; }
+
     setSubmitting(true);
     try {
+      const { resourceId, resourceName, capacity, location } = form;
       if (editId) {
-        await updateResource(editId, { resourceName, capacity: Number(capacity), location }, token);
-        showToast("Resource updated.");
+        await updateResource(
+          editId,
+          { resourceName: resourceName.trim(), capacity: Number(capacity), location: location.trim() },
+          token
+        );
+        showToast("Resource updated successfully.");
       } else {
-        await addResource({ resourceId, resourceName, capacity: Number(capacity), location }, token);
-        showToast("Resource added.");
+        await addResource(
+          { resourceId: resourceId.trim(), resourceName: resourceName.trim(), capacity: Number(capacity), location: location.trim() },
+          token
+        );
+        showToast("Resource added successfully.");
       }
-      setForm(EMPTY_FORM); setEditId(null); setShowForm(false);
+      setForm(EMPTY_FORM);
+      setEditId(null);
+      setShowForm(false);
       fetchResources();
-    } catch (e) { setError(e.message); }
-    finally { setSubmitting(false); }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleEdit = (r) => {
+    setError("");
     setEditId(r._id);
-    setForm({ resourceId: r.resourceId, resourceName: r.resourceName, capacity: String(r.capacity), location: r.location || "" });
+    setForm({
+      resourceId:   r.resourceId,
+      resourceName: r.resourceName,
+      capacity:     String(r.capacity),
+      location:     r.location || "",
+    });
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleCancelEdit = () => { setEditId(null); setForm(EMPTY_FORM); setError(""); setShowForm(false); };
+  const handleCancelEdit = () => {
+    setEditId(null);
+    setForm(EMPTY_FORM);
+    setError("");
+    setShowForm(false);
+  };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this resource? This cannot be undone.")) return;
+    if (!window.confirm("Delete this resource? All bookings for this resource may be affected. This cannot be undone.")) return;
     setDeletingId(id);
     try {
       await deleteResource(id, token);
       showToast("Resource deleted.");
       setResources(prev => prev.filter(r => r._id !== id));
-    } catch (e) { setError(e.message); }
-    finally { setDeletingId(null); }
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const handleLogout = () => { localStorage.clear(); navigate("/"); };
 
-  const analyticsPeak = analytics?.peakHours?.reduce((a, b) => b.bookingCount > a.bookingCount ? b : a, analytics?.peakHours?.[0]);
-  const analyticsTop  = analytics?.popularResources?.[0];
+  const analyticsPeak = analytics?.peakHours?.reduce(
+    (a, b) => b.bookingCount > a.bookingCount ? b : a,
+    analytics?.peakHours?.[0]
+  );
+  const analyticsTop = analytics?.popularResources?.[0];
+
+  const totalCapacity = resources.reduce((s, r) => s + (r.capacity || 0), 0);
+  const uniqueLocations = new Set(resources.map(r => r.location).filter(Boolean)).size;
 
   return (
     <>
@@ -228,7 +301,6 @@ export default function AdminPage() {
         }
         body { background: var(--bg); font-family: var(--font-b); color: var(--ink); }
 
-        /* NAV */
         .nav {
           background: var(--navy); padding: 0 60px;
           display: flex; align-items: center; justify-content: space-between;
@@ -259,10 +331,8 @@ export default function AdminPage() {
         }
         .nav-btn:hover { border-color: rgba(255,255,255,0.5); color: #fff; }
 
-        /* SHELL */
         .shell { max-width: 1200px; margin: 0 auto; padding: 48px 60px 80px; }
 
-        /* PAGE HEADER */
         .page-eyebrow {
           font-size: 10px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase;
           color: var(--navy); display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
@@ -271,44 +341,42 @@ export default function AdminPage() {
         .page-title { font-family: var(--font-s); font-size: clamp(32px,4vw,48px); line-height: 1.05; margin-bottom: 40px; }
         .page-title em { color: var(--navy); font-style: italic; }
 
-        /* ALERTS */
         .alert { border-radius: 2px; padding: 12px 16px; font-size: 13px; margin-bottom: 24px; display: flex; align-items: center; gap: 8px; }
         .alert.error { background: var(--red-lt); border: 1px solid rgba(192,57,43,0.2); color: var(--red); }
 
-        /* TOAST */
         .toast {
           position: fixed; bottom: 32px; right: 32px; z-index: 999;
-          background: var(--ink); color: #fff; font-size: 13px; font-weight: 500;
+          font-size: 13px; font-weight: 500;
           padding: 12px 20px; border-radius: 4px; box-shadow: 0 8px 32px rgba(10,15,30,0.25);
           animation: toastIn 0.3s ease;
         }
+        .toast.success { background: var(--ink); color: #fff; }
+        .toast.error   { background: var(--red); color: #fff; }
         @keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 
-        /* STAT CARDS ROW */
-        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 32px; }
+        .stats-row {
+          display: grid; grid-template-columns: repeat(4, 1fr);
+          gap: 1px; background: var(--border);
+          border: 1px solid var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 32px;
+        }
         .stat-card { background: var(--surface); padding: 24px 24px 20px; position: relative; overflow: hidden; }
         .stat-card::before { content:''; position:absolute; left:0; top:0; right:0; height:3px; background: var(--navy); }
         .stat-card.accent-amber::before { background: #d97706; }
         .stat-card.accent-green::before { background: var(--green); }
-        .stat-card.accent-blue::before { background: #2a4db5; }
+        .stat-card.accent-blue::before  { background: #2a4db5; }
         .stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
         .stat-val { font-family: var(--font-s); font-size: 32px; color: var(--ink); line-height: 1; }
         .stat-val.sm { font-size: 18px; padding-top: 6px; }
         .stat-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
-        /* SECTION DIVIDER */
         .section-head {
           display: flex; align-items: center; justify-content: space-between;
           margin-bottom: 20px; margin-top: 40px;
         }
         .section-title-wrap { display: flex; align-items: center; gap: 10px; }
-        .section-eyebrow {
-          font-size: 10px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase;
-          color: var(--navy);
-        }
+        .section-eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: var(--navy); }
         .section-count { font-family: var(--font-s); font-size: 13px; font-style: italic; color: var(--muted); }
 
-        /* ADD RESOURCE BUTTON */
         .btn-add-resource {
           font-family: var(--font-b); font-size: 12px; font-weight: 600;
           letter-spacing: 0.08em; text-transform: uppercase;
@@ -318,7 +386,6 @@ export default function AdminPage() {
         }
         .btn-add-resource:hover { background: var(--navy-dk); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(15,31,92,0.28); }
 
-        /* RESOURCE GRID */
         .resource-grid {
           display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
           gap: 1px; background: var(--border);
@@ -374,24 +441,22 @@ export default function AdminPage() {
         .btn-delete-card:hover:not(:disabled) { background: var(--red-lt); }
         .btn-delete-card:disabled { opacity: 0.4; cursor: not-allowed; }
 
-        /* EMPTY / LOADING */
         .empty-state {
           text-align: center; padding: 64px 0;
           border: 1px dashed var(--border); border-radius: 4px; background: var(--surface);
         }
-        .empty-icon { font-size: 36px; opacity: 0.4; margin-bottom: 12px; }
+        .empty-icon  { font-size: 36px; opacity: 0.4; margin-bottom: 12px; }
         .empty-title { font-family: var(--font-s); font-size: 20px; color: var(--ink); margin-bottom: 6px; }
-        .empty-sub { font-size: 13px; color: var(--muted); }
+        .empty-sub   { font-size: 13px; color: var(--muted); }
 
         .spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--navy); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 40px auto; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* MODAL OVERLAY */
+        /* MODAL */
         .modal-overlay {
           position: fixed; inset: 0; z-index: 200;
           background: rgba(10,15,30,0.45);
-          display: flex; align-items: center; justify-content: center;
-          padding: 24px;
+          display: flex; align-items: center; justify-content: center; padding: 24px;
           animation: fadeOverlay 0.2s ease;
         }
         @keyframes fadeOverlay { from { opacity: 0; } to { opacity: 1; } }
@@ -405,11 +470,10 @@ export default function AdminPage() {
         .modal-bar { position: absolute; left:0; top:0; right:0; height:4px; background: var(--navy); }
         .modal-bar.editing { background: #d97706; }
         .modal-header { padding: 28px 28px 20px; border-bottom: 1px solid var(--border); }
-        .modal-title { font-family: var(--font-s); font-size: 22px; color: var(--ink); }
-        .modal-body { padding: 24px 28px; }
+        .modal-title  { font-family: var(--font-s); font-size: 22px; color: var(--ink); }
+        .modal-body   { padding: 24px 28px; }
         .modal-footer { padding: 0 28px 24px; display: flex; flex-direction: column; gap: 8px; }
 
-        /* FORM */
         .form-group { margin-bottom: 18px; display: flex; flex-direction: column; gap: 6px; }
         .form-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
         .form-label span { color: var(--red); margin-left: 2px; }
@@ -418,8 +482,8 @@ export default function AdminPage() {
           border: 1px solid var(--border); border-radius: 2px; width: 100%;
           transition: border-color 0.2s; background: #fff;
         }
-        .form-input:focus { outline: none; border-color: var(--navy); }
-        .form-input:disabled { background: #f8f9fd; color: var(--muted); }
+        .form-input:focus   { outline: none; border-color: var(--navy); }
+        .form-input:disabled { background: #f8f9fd; color: var(--muted); cursor: not-allowed; }
         .form-hint { font-size: 11px; color: var(--muted); }
 
         .btn-submit {
@@ -447,21 +511,23 @@ export default function AdminPage() {
           border-radius: 4px; position: relative; overflow: hidden;
           box-shadow: 0 8px 24px rgba(10,15,30,0.04);
         }
-        .chart-card-bar { position: absolute; left:0; top:0; right:0; height:3px; background: var(--navy); }
+        .chart-card-bar    { position: absolute; left:0; top:0; right:0; height:3px; background: var(--navy); }
         .chart-card-header { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); }
-        .chart-card-title { font-family: var(--font-s); font-size: 16px; color: var(--ink); }
-        .chart-card-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
-        .chart-card-body { padding: 18px 20px 20px; }
+        .chart-card-title  { font-family: var(--font-s); font-size: 16px; color: var(--ink); }
+        .chart-card-sub    { font-size: 11px; color: var(--muted); margin-top: 2px; }
+        .chart-card-body   { padding: 18px 20px 20px; }
 
-        /* ANALYTICS STAT ROW */
-        .analytics-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
-        .analytics-stat { background: var(--surface); padding: 20px; }
+        .analytics-stats {
+          display: grid; grid-template-columns: repeat(3,1fr);
+          gap: 1px; background: var(--border);
+          border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+        }
+        .analytics-stat       { background: var(--surface); padding: 20px; }
         .analytics-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
-        .analytics-stat-val { font-family: var(--font-s); font-size: 28px; color: var(--ink); line-height: 1; }
+        .analytics-stat-val   { font-family: var(--font-s); font-size: 28px; color: var(--ink); line-height: 1; }
         .analytics-stat-val.sm { font-size: 16px; padding-top: 4px; }
-        .analytics-stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+        .analytics-stat-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
-        /* REFRESH BTN */
         .btn-refresh {
           font-family: var(--font-b); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
           color: var(--muted); background: transparent; border: 1px solid var(--border);
@@ -470,7 +536,6 @@ export default function AdminPage() {
         .btn-refresh:hover:not(:disabled) { border-color: var(--navy); color: var(--navy); }
         .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* FOOTER */
         .page-footer {
           margin-top: 64px; padding-top: 28px; border-top: 1px solid var(--border);
           display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
@@ -483,11 +548,11 @@ export default function AdminPage() {
 
         @media (max-width: 1024px) { .analytics-grid { grid-template-columns: 1fr; } }
         @media (max-width: 768px) {
-          .nav { padding: 0 24px; }
+          .nav   { padding: 0 24px; }
           .shell { padding: 32px 24px 60px; }
-          .stats-row { grid-template-columns: repeat(2,1fr); }
-          .analytics-stats { grid-template-columns: 1fr; }
-          .resource-grid { grid-template-columns: 1fr; }
+          .stats-row        { grid-template-columns: repeat(2,1fr); }
+          .analytics-stats  { grid-template-columns: 1fr; }
+          .resource-grid    { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -507,12 +572,10 @@ export default function AdminPage() {
       </nav>
 
       <div className="shell">
-
-        {/* PAGE HEADER */}
         <p className="page-eyebrow">Administration</p>
         <h1 className="page-title">Manage <em>Campus.</em></h1>
 
-        {error && <div className="alert error">⚠ {error}</div>}
+        {error && !showForm && <div className="alert error">⚠ {error}</div>}
 
         {/* STATS ROW */}
         <div className="stats-row">
@@ -523,7 +586,7 @@ export default function AdminPage() {
           </div>
           <div className="stat-card accent-blue">
             <div className="stat-label">Total Capacity</div>
-            <div className="stat-val">{loading ? "—" : resources.reduce((s, r) => s + (r.capacity || 0), 0)}</div>
+            <div className="stat-val">{loading ? "—" : totalCapacity.toLocaleString()}</div>
             <div className="stat-sub">Seats across campus</div>
           </div>
           <div className="stat-card accent-amber">
@@ -533,18 +596,21 @@ export default function AdminPage() {
           </div>
           <div className="stat-card accent-green">
             <div className="stat-label">Locations</div>
-            <div className="stat-val">{loading ? "—" : new Set(resources.map(r => r.location).filter(Boolean)).size}</div>
+            <div className="stat-val">{loading ? "—" : uniqueLocations}</div>
             <div className="stat-sub">Unique locations</div>
           </div>
         </div>
 
-        {/* ── RESOURCES SECTION ── */}
+        {/* RESOURCES */}
         <div className="section-head">
           <div className="section-title-wrap">
             <span className="section-eyebrow">Resources</span>
             {!loading && <span className="section-count">— {resources.length} registered</span>}
           </div>
-          <button className="btn-add-resource" onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true); }}>
+          <button
+            className="btn-add-resource"
+            onClick={() => { setEditId(null); setForm(EMPTY_FORM); setError(""); setShowForm(true); }}
+          >
             + Add Resource
           </button>
         </div>
@@ -602,7 +668,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── ANALYTICS SECTION ── */}
+        {/* ANALYTICS */}
         <div className="section-head" style={{ marginTop: 56 }}>
           <div className="section-title-wrap">
             <span className="section-eyebrow">Analytics</span>
@@ -613,18 +679,17 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* Analytics stat row */}
         <div className="analytics-stats">
           <div className="analytics-stat">
             <div className="analytics-stat-label">Peak Hour</div>
-            <div className={`analytics-stat-val${analyticsPeak?.timeSlot && analyticsPeak.timeSlot.length > 8 ? " sm" : ""}`}>
+            <div className={`analytics-stat-val${analyticsPeak?.timeSlot?.length > 8 ? " sm" : ""}`}>
               {analyticsLoad ? "—" : analyticsErr ? "—" : analyticsPeak?.timeSlot ?? "—"}
             </div>
             {analyticsPeak && <div className="analytics-stat-sub">{analyticsPeak.bookingCount} bookings</div>}
           </div>
           <div className="analytics-stat">
             <div className="analytics-stat-label">Top Resource</div>
-            <div className={`analytics-stat-val${analyticsTop?.resourceName && analyticsTop.resourceName.length > 10 ? " sm" : ""}`}>
+            <div className={`analytics-stat-val${analyticsTop?.resourceName?.length > 10 ? " sm" : ""}`}>
               {analyticsLoad ? "—" : analyticsErr ? "—" : analyticsTop?.resourceName ?? "—"}
             </div>
             {analyticsTop && <div className="analytics-stat-sub">{analyticsTop.bookingCount} bookings</div>}
@@ -638,9 +703,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {analyticsErr && (
-          <div className="alert error" style={{ marginTop: 16 }}>⚠ {analyticsErr}</div>
-        )}
+        {analyticsErr && <div className="alert error" style={{ marginTop: 16 }}>⚠ {analyticsErr}</div>}
 
         {!analyticsErr && (
           <div className="analytics-grid">
@@ -651,9 +714,7 @@ export default function AdminPage() {
                 <div className="chart-card-sub">Bookings by time slot</div>
               </div>
               <div className="chart-card-body">
-                {analyticsLoad
-                  ? <div className="spinner" style={{ margin: "24px auto" }} />
-                  : <PeakHoursChart peakHours={analytics?.peakHours} />}
+                {analyticsLoad ? <div className="spinner" style={{ margin: "24px auto" }} /> : <PeakHoursChart peakHours={analytics?.peakHours} />}
               </div>
             </div>
             <div className="chart-card">
@@ -663,55 +724,95 @@ export default function AdminPage() {
                 <div className="chart-card-sub">Ranked by booking count</div>
               </div>
               <div className="chart-card-body">
-                {analyticsLoad
-                  ? <div className="spinner" style={{ margin: "24px auto" }} />
-                  : <PopularResourcesChart resources={analytics?.popularResources} />}
+                {analyticsLoad ? <div className="spinner" style={{ margin: "24px auto" }} /> : <PopularResourcesChart resources={analytics?.popularResources} />}
               </div>
             </div>
           </div>
         )}
 
-        {/* FOOTER */}
         <div className="page-footer">
           <div className="footer-logo">Smart<span>Campus</span></div>
           <div className="footer-copy">© 2025 SmartCampus — Admin</div>
         </div>
       </div>
 
-      {/* ── ADD / EDIT MODAL ── */}
+      {/* ADD / EDIT MODAL */}
       {showForm && (
         <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && handleCancelEdit()}>
-          <div className="modal">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <div className={`modal-bar${editId ? " editing" : ""}`} />
             <div className="modal-header">
-              <div className="modal-title">{editId ? "✏ Edit Resource" : "+ Add Resource"}</div>
+              <div className="modal-title" id="modal-title">
+                {editId ? "✏ Edit Resource" : "+ Add Resource"}
+              </div>
             </div>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate>
               <div className="modal-body">
                 {error && <div className="alert error" style={{ marginBottom: 16 }}>⚠ {error}</div>}
                 <div className="form-group">
                   <label className="form-label">Resource ID <span>*</span></label>
-                  <input className="form-input" name="resourceId" value={form.resourceId} onChange={handleChange} placeholder="e.g. LAB-001" disabled={!!editId} />
-                  {editId && <span className="form-hint">Resource ID cannot be changed.</span>}
+                  <input
+                    className="form-input"
+                    name="resourceId"
+                    value={form.resourceId}
+                    onChange={handleChange}
+                    placeholder="e.g. LAB-001"
+                    disabled={!!editId}
+                    autoFocus={!editId}
+                  />
+                  {editId
+                    ? <span className="form-hint">Resource ID cannot be changed after creation.</span>
+                    : <span className="form-hint">Must be unique across all resources.</span>
+                  }
                 </div>
                 <div className="form-group">
                   <label className="form-label">Resource Name <span>*</span></label>
-                  <input className="form-input" name="resourceName" value={form.resourceName} onChange={handleChange} placeholder="e.g. Physics Laboratory" />
+                  <input
+                    className="form-input"
+                    name="resourceName"
+                    value={form.resourceName}
+                    onChange={handleChange}
+                    placeholder="e.g. Physics Laboratory"
+                    autoFocus={!!editId}
+                  />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Capacity <span>*</span></label>
-                  <input className="form-input" name="capacity" type="number" min="1" value={form.capacity} onChange={handleChange} placeholder="e.g. 30" />
+                  <input
+                    className="form-input"
+                    name="capacity"
+                    type="number"
+                    min="1"
+                    max="10000"
+                    value={form.capacity}
+                    onChange={handleChange}
+                    placeholder="e.g. 30"
+                  />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Location</label>
-                  <input className="form-input" name="location" value={form.location} onChange={handleChange} placeholder="e.g. Block A, Floor 2" />
+                  <input
+                    className="form-input"
+                    name="location"
+                    value={form.location}
+                    onChange={handleChange}
+                    placeholder="e.g. Block A, Floor 2"
+                  />
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="submit" className={`btn-submit${editId ? " editing" : ""}`} disabled={submitting}>
-                  {submitting ? (editId ? "Updating…" : "Adding…") : (editId ? "Update Resource →" : "Add Resource →")}
+                <button
+                  type="submit"
+                  className={`btn-submit${editId ? " editing" : ""}`}
+                  disabled={submitting}
+                >
+                  {submitting
+                    ? (editId ? "Updating…" : "Adding…")
+                    : (editId ? "Update Resource →" : "Add Resource →")}
                 </button>
-                <button type="button" className="btn-cancel" onClick={handleCancelEdit}>Cancel</button>
+                <button type="button" className="btn-cancel" onClick={handleCancelEdit}>
+                  Cancel
+                </button>
               </div>
             </form>
           </div>
@@ -719,7 +820,11 @@ export default function AdminPage() {
       )}
 
       {/* TOAST */}
-      {toast && <div className="toast">✓ {toast}</div>}
+      {toast.msg && (
+        <div className={`toast ${toast.type}`}>
+          {toast.type === "success" ? "✓" : "⚠"} {toast.msg}
+        </div>
+      )}
     </>
   );
 }
