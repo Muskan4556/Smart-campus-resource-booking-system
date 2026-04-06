@@ -1,22 +1,27 @@
 // apps/booking-service/server.js
 
-// ✅ LOAD ENV FILE (VERY IMPORTANT)
 require("dotenv").config({ path: "../../.env" });
 
 const express = require("express");
 const mongoose = require("mongoose");
+const cors = require("cors");          // ← add this
 
 const bookingRoutes = require("./routes/bookingRoutes");
 
 const app = express();
 
 // ✅ MIDDLEWARE
+app.use(cors({
+  origin: "http://localhost:3000",     // ← your frontend URL/port
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "role"],
+}));
 app.use(express.json());
 
 // ✅ CONNECT TO MONGODB
 mongoose
   .connect(process.env.MONGO_URI, {
-    dbName: "campus-booking", 
+    dbName: "campus-booking",
   })
   .then(() => console.log("MongoDB Connected ✅"))
   .catch((err) => console.error("MongoDB Error ❌:", err));
