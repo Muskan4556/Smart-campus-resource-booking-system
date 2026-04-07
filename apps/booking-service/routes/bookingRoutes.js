@@ -197,8 +197,8 @@ router.get("/resource/:resourceId", async (req, res) => {
     if (formattedDate) query.date = formattedDate;
 
     const bookings = await Booking.find(query).select(
-      "startTime endTime userId",
-    );
+  "date startTime endTime userId"
+);
 
     res.json(bookings);
   } catch {

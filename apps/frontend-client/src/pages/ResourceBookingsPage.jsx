@@ -132,6 +132,7 @@ export default function ResourceBookingsPage() {
     setError("");
     try {
       const data = await fetchResourceBookings(resourceId, token);
+      console.log("Bookings:", data);
       setBookings(data);
 
       // Fetch unique users in parallel
