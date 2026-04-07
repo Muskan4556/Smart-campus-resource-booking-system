@@ -16,6 +16,7 @@ app.use(cors({
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "role"],
 }));
+
 app.use(express.json());
 
 // ✅ CONNECT TO MONGODB
