@@ -3,200 +3,224 @@ const router = express.Router();
 const Booking = require("../models/Booking");
 const axios = require("axios");
 
-const AUTH_SERVICE_URL     = process.env.AUTH_SERVICE_URL     || "http://localhost:4000";
-const RESOURCE_SERVICE_URL = process.env.RESOURCE_SERVICE_URL || "http://localhost:5002";
+// SERVICES
+const AUTH_SERVICE_URL =
+  process.env.AUTH_SERVICE_URL || "http://localhost:4000";
+const RESOURCE_SERVICE_URL =
+  process.env.RESOURCE_SERVICE_URL || "http://localhost:5002";
 
-// ------------------- KAFKA SETUP -------------------
-const { Kafka } = require('kafkajs');
+// KAFKA
+const { Kafka } = require("kafkajs");
 
 const kafka = new Kafka({
-  clientId: 'booking-service',
-  brokers: ['localhost:9092']
+  clientId: "booking-service",
+  brokers: ["localhost:9092"],
 });
 
 const producer = kafka.producer();
 
-// connect only once
-producer.connect()
+producer
+  .connect()
   .then(() => console.log("Kafka Producer Connected"))
-  .catch(err => console.log("Kafka not running, continuing without it..."));
+  .catch(() => console.log("Kafka not running, continuing..."));
 
-
-// ------------------- REDIS SETUP -------------------
+// REDIS
 const redis = require("redis");
 
 const redisClient = redis.createClient({
-  url: "redis://localhost:6379"
+  url: "redis://localhost:6379",
 });
 
-redisClient.connect()
+redisClient
+  .connect()
   .then(() => console.log("Redis Connected"))
-  .catch(err => console.log("Redis not running, continuing without it..."));
+  .catch(() => console.log("Redis not running, continuing..."));
 
+// HELPERS
 
-// ------------------- CREATE BOOKING -------------------
-router.post("/book", async (req,res)=>{
+function formatDate(dateStr) {
+  if (!dateStr) return "N/A";
 
-try{
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
 
-const {userId, resourceId, date, startTime, endTime} = req.body;
+  return d.toLocaleDateString("en-GB").replace(/\//g, "-");
+}
 
-// check overlap
-const existing = await Booking.findOne({
-  resourceId,
-  date,
-  $or:[
-    {
-      startTime:{$lt:endTime},
-      endTime:{$gt:startTime}
+function timeToMinutes(t) {
+  if (!t) return NaN;
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function normalizeTime(t) {
+  if (!t) return t;
+  const [h, m] = t.split(":");
+  return `${String(h).padStart(2, "0")}:${m}`;
+}
+
+function isOverlap(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && aEnd > bStart;
+}
+
+// CREATE BOOKING
+router.post("/book", async (req, res) => {
+  try {
+    let { userId, resourceId, date, startTime, endTime } = req.body;
+
+    // format date (handles ISO, string, etc.)
+    date = formatDate(date);
+
+    if (!userId || !resourceId || !date || !startTime || !endTime) {
+      return res.status(400).json({ message: "All fields are required" });
     }
-  ]
-});
 
-if(existing){
-  return res.status(400).json({message:"Slot already booked"});
-}
+    startTime = normalizeTime(startTime);
+    endTime = normalizeTime(endTime);
 
-// create booking
-const booking = new Booking({
-  userId,
-  resourceId,
-  date,
-  startTime,
-  endTime
-});
+    const newStart = timeToMinutes(startTime);
+    const newEnd = timeToMinutes(endTime);
 
-await booking.save();
+    if (
+      !Number.isFinite(newStart) ||
+      !Number.isFinite(newEnd) ||
+      newEnd <= newStart
+    ) {
+      return res.status(400).json({ message: "Invalid time range" });
+    }
 
-// ------------------- REDIS CACHE CLEAR -------------------
-try {
-  await redisClient.del(`userBookings:${booking.userId}`);
-  await redisClient.del(`availability:${booking.resourceId}:${booking.date}`);
-} catch (_) {}
+    const existingBookings = await Booking.find({ resourceId, date });
 
+    for (const b of existingBookings) {
+      const bs = timeToMinutes(b.startTime);
+      const be = timeToMinutes(b.endTime);
 
-// ------------------- KAFKA EVENT -------------------
-try {
+      if (isOverlap(newStart, newEnd, bs, be)) {
+        return res.status(400).json({ message: "Slot already booked" });
+      }
+    }
 
-  const [userRes, resourceRes] = await Promise.allSettled([
-    axios.get(`${AUTH_SERVICE_URL}/auth/users/${booking.userId}`),
-    axios.get(`${RESOURCE_SERVICE_URL}/resources/${booking.resourceId}`)
-  ]);
+    const booking = new Booking({
+      userId,
+      resourceId,
+      date,
+      startTime,
+      endTime,
+    });
 
-  const user     = userRes.status     === "fulfilled" ? userRes.value.data     : {};
-  const resource = resourceRes.status === "fulfilled" ? resourceRes.value.data : {};
+    await booking.save();
 
-  const eventData = {
-    bookingId:    booking._id.toString(),
-    userId:       booking.userId,
-    resourceId:   booking.resourceId,
-    resourceName: resource.resourceName || req.body.resourceName || "",
-    date:         booking.date,
-    startTime:    booking.startTime,
-    endTime:      booking.endTime,
-    userEmail:    user.email    || req.body.userEmail || "",
-    userName:     user.name     || req.body.userName  || "",
-  };
-
-  await producer.send({
-    topic: 'booking-created',
-    messages: [{ value: JSON.stringify(eventData) }]
-  });
-
-  console.log("Kafka event sent");
-
-} catch (err) {
-  console.log("Kafka not running, skipping...");
-}
-
-res.json({
-  message:"Booking successful",
-  booking
-});
-
-}catch(error){
-  console.log("Booking creation error:", error.message, error.stack);
-  res.status(500).json({message:"Error creating booking", error: error.message});
-}
-
-});
-
-
-// ------------------- GET ALL BOOKINGS -------------------
-router.get("/", async (req,res)=>{
-const bookings = await Booking.find();
-res.json(bookings);
-});
-
-
-// ------------------- GET USER BOOKINGS (WITH REDIS CACHE) -------------------
-router.get("/user/:userId", async (req,res)=>{
-
-try{
-
-const key = `userBookings:${req.params.userId}`;
-
-// check cache
-try {
-  const cached = await redisClient.get(key);
-  if (cached) {
-    console.log("From Redis");
-    return res.json(JSON.parse(cached));
-  }
-} catch (_) {}
-
-// fetch from DB
-const bookings = await Booking.find({userId:req.params.userId});
-
-// store in Redis (5 mins)
-try {
-  await redisClient.set(key, JSON.stringify(bookings), { EX: 300 });
-} catch (_) {}
-
-res.json(bookings);
-
-}catch(error){
-  res.status(500).json({message:"Error fetching bookings"});
-}
-
-});
-
-router.get("/resource/:resourceId", async (req, res) => {
     try {
-      const { resourceId } = req.params;
-      const { date } = req.query;
- 
-      const query = { resourceId };
-      if (date) query.date = date;
- 
-     const bookings = await Booking.find(query).select("startTime endTime userId");
-     res.json(bookings);
-   } catch (error) {
-     res.status(500).json({ message: "Error fetching resource bookings" });
-   }
- });
-// ------------------- DELETE BOOKING -------------------
-router.delete("/:id", async (req,res)=>{
+      await redisClient.del(`userBookings:${userId}`);
+      await redisClient.del(`availability:${resourceId}:${date}`);
+    } catch {}
 
-try{
+    let user = {};
+    let resource = {};
 
-const booking = await Booking.findByIdAndDelete(req.params.id);
+    try {
+      const [userRes, resourceRes] = await Promise.allSettled([
+        axios.get(`${AUTH_SERVICE_URL}/auth/users/${userId}`),
+        axios.get(`${RESOURCE_SERVICE_URL}/resources/${resourceId}`),
+      ]);
 
-if(!booking){
-  return res.status(404).json({message:"Booking not found"});
-}
+      if (userRes.status === "fulfilled") user = userRes.value.data;
+      if (resourceRes.status === "fulfilled") resource = resourceRes.value.data;
+    } catch {}
 
-// clear cache
-try {
-  await redisClient.del(`userBookings:${booking.userId}`);
-} catch (_) {}
+    const eventData = {
+      bookingId: booking._id.toString(),
+      userId,
+      resourceId,
+      resourceName: resource.resourceName || req.body.resourceName,
+      date,
+      startTime,
+      endTime,
+      userEmail: user.email || req.body.userEmail,
+      userName: user.name || req.body.userName,
+    };
 
-res.json({message:"Booking deleted successfully"});
+    try {
+      await producer.send({
+        topic: "booking-created",
+        messages: [{ value: JSON.stringify(eventData) }],
+      });
 
-}catch(error){
-  res.status(500).json({message:"Error deleting booking"});
-}
+      console.log("Kafka event sent");
+    } catch {
+      console.log("Kafka not running, skipping...");
+    }
 
+    res.json({
+      message: "Booking successful",
+      booking,
+    });
+  } catch (error) {
+    console.log("Booking error:", error);
+    res.status(500).json({ message: "Booking failed" });
+  }
+});
+
+// GET ALL BOOKINGS
+router.get("/", async (req, res) => {
+  const bookings = await Booking.find();
+  res.json(bookings);
+});
+
+// GET USER BOOKINGS
+router.get("/user/:userId", async (req, res) => {
+  try {
+    const key = `userBookings:${req.params.userId}`;
+
+    const cached = await redisClient.get(key);
+    if (cached) return res.json(JSON.parse(cached));
+
+    const bookings = await Booking.find({ userId: req.params.userId });
+
+    await redisClient.set(key, JSON.stringify(bookings), { EX: 300 });
+
+    res.json(bookings);
+  } catch {
+    res.status(500).json({ message: "Error fetching bookings" });
+  }
+});
+
+// GET RESOURCE BOOKINGS
+router.get("/resource/:resourceId", async (req, res) => {
+  try {
+    const { resourceId } = req.params;
+    const { date } = req.query;
+
+    const formattedDate = date ? formatDate(date) : null;
+
+    const query = { resourceId };
+    if (formattedDate) query.date = formattedDate;
+
+    const bookings = await Booking.find(query).select(
+      "startTime endTime userId",
+    );
+
+    res.json(bookings);
+  } catch {
+    res.status(500).json({ message: "Error fetching resource bookings" });
+  }
+});
+
+// DELETE BOOKING
+router.delete("/:id", async (req, res) => {
+  try {
+    const booking = await Booking.findByIdAndDelete(req.params.id);
+
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    await redisClient.del(`userBookings:${booking.userId}`);
+
+    res.json({ message: "Booking deleted successfully" });
+  } catch {
+    res.status(500).json({ message: "Delete failed" });
+  }
 });
 
 module.exports = router;

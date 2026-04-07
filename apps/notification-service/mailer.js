@@ -16,8 +16,13 @@ const transporter = SMTP_CONFIGURED
   : null;
 
 async function sendBookingConfirmation(booking) {
-  const { userEmail, userName, resourceName, date, startTime, endTime } =
-    booking;
+  const userEmail = booking.userEmail;
+  const userName = booking.userName;
+  const resourceName = booking.resourceName;
+  const date = booking.date ?? booking.bookingDate;
+  const startTime = booking.startTime ?? "";
+  const endTime = booking.endTime ?? "";
+  const dateDisplay = date != null && String(date).trim() !== "" ? date : "—";
 
   const subject = `Booking Confirmed — ${resourceName}`;
 
@@ -27,7 +32,7 @@ Hi ${userName || "there"},
 Your campus resource booking has been confirmed.
 
   Resource  : ${resourceName}
-  Date      : ${date}
+  Date      : ${dateDisplay}
   Time      : ${startTime} → ${endTime}
 
 No action is needed. If you need to cancel, please log in to SmartCampus.
@@ -50,7 +55,7 @@ No action is needed. If you need to cancel, please log in to SmartCampus.
       </tr>
       <tr style="border-bottom: 1px solid #e8ecf4;">
         <td style="padding: 10px 0; color: #5c6b8a;">Date</td>
-        <td style="padding: 10px 0; font-weight: 600;">${date}</td>
+        <td style="padding: 10px 0; font-weight: 600;">${dateDisplay}</td>
       </tr>
       <tr>
         <td style="padding: 10px 0; color: #5c6b8a;">Time</td>
@@ -78,7 +83,7 @@ No action is needed. If you need to cancel, please log in to SmartCampus.
     console.log(`         To      : ${userEmail || "unknown"}`);
     console.log(`         Subject : ${subject}`);
     console.log(`         Resource: ${resourceName}`);
-    console.log(`         Date    : ${date}  |  ${startTime} → ${endTime}`);
+    console.log(`         Date    : ${dateDisplay}  |  ${startTime} → ${endTime}`);
     console.log("\n");
   }
 }
