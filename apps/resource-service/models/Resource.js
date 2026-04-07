@@ -1,6 +1,11 @@
 const mongoose = require("mongoose");
 
 const resourceSchema = new mongoose.Schema({
+  resourceId: {
+    type: String,
+    unique: true,
+    default: () => "RES-" + Date.now().toString(36).toUpperCase(),
+  },
   name: {
     type: String,
     required: true

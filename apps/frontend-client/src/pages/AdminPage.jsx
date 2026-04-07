@@ -25,34 +25,37 @@ const addResource    = (body, token)     => apiFetch("/add", { method: "POST", b
 const deleteResource = (id, token)       => apiFetch(`/${id}`, { method: "DELETE" }, token);
 const updateResource = (id, body, token) => apiFetch(`/${id}`, { method: "PUT", body: JSON.stringify(body) }, token);
 
-// Auto-generate resource ID from timestamp
-function generateResourceId() {
-  return "RES-" + Date.now().toString(36).toUpperCase();
-}
-
-// Predefined hourly time slots
-const TIME_SLOTS = [
-  "06:00-07:00", "07:00-08:00", "08:00-09:00", "09:00-10:00",
-  "10:00-11:00", "11:00-12:00", "12:00-13:00", "13:00-14:00",
-  "14:00-15:00", "15:00-16:00", "16:00-17:00", "17:00-18:00",
-  "18:00-19:00", "19:00-20:00", "20:00-21:00", "21:00-22:00",
-];
-
-const EMPTY_FORM = { resourceName: "", capacity: "", location: "", timeSlot: "" };
-
-const RESOURCE_ICONS = {
-  lab: "🔬", library: "📚", sport: "🏟️", auditorium: "🎭",
-  equipment: "💻", default: "📋",
+const EMPTY_FORM = {
+  name: "",
+  type: "",
+  capacity: "",
+  location: "",
+  availStart: "",
+  availEnd: "",
 };
 
-function getIcon(name = "") {
-  const n = name.toLowerCase();
-  if (n.includes("lab"))        return RESOURCE_ICONS.lab;
-  if (n.includes("library"))    return RESOURCE_ICONS.library;
-  if (n.includes("sport") || n.includes("court") || n.includes("gym")) return RESOURCE_ICONS.sport;
-  if (n.includes("auditorium") || n.includes("seminar") || n.includes("hall")) return RESOURCE_ICONS.auditorium;
-  if (n.includes("computer") || n.includes("equipment") || n.includes("projector")) return RESOURCE_ICONS.equipment;
-  return RESOURCE_ICONS.default;
+const RESOURCE_TYPES = ["Lab", "Room", "Auditorium", "Sports Area", "Library"];
+
+const RESOURCE_ICONS = {
+  Lab: "🔬",
+  Library: "📚",
+  "Sports Area": "🏟️",
+  Auditorium: "🎭",
+  Room: "🚪",
+  default: "📋",
+};
+
+function getIcon(type = "") {
+  return RESOURCE_ICONS[type] || RESOURCE_ICONS.default;
+}
+
+// Format time "09:00" → "9:00 AM"
+function formatTime(t) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 // ── Analytics sub-components ───────────────────────────────────────────────
@@ -192,12 +195,15 @@ export default function AdminPage() {
   };
 
   const validateForm = () => {
-    const { resourceName, capacity, timeSlot } = form;
-    if (!resourceName.trim())     return "Resource Name is required.";
-    if (!capacity)                return "Capacity is required.";
-    if (Number(capacity) <= 0)    return "Capacity must be greater than 0.";
-    if (Number(capacity) > 10000) return "Capacity seems unrealistically large.";
-    if (!timeSlot)                return "Please select a time slot.";
+    const { name, type, capacity, availStart, availEnd } = form;
+    if (!name.trim())              return "Resource Name is required.";
+    if (!type)                     return "Resource Type is required.";
+    if (!capacity)                 return "Capacity is required.";
+    if (Number(capacity) <= 0)     return "Capacity must be greater than 0.";
+    if (Number(capacity) > 10000)  return "Capacity seems unrealistically large.";
+    if (!availStart)               return "Availability start time is required.";
+    if (!availEnd)                 return "Availability end time is required.";
+    if (availStart >= availEnd)    return "End time must be after start time.";
     return null;
   };
 
@@ -209,20 +215,20 @@ export default function AdminPage() {
 
     setSubmitting(true);
     try {
-      const { resourceName, capacity, location, timeSlot } = form;
+      const { name, type, capacity, location, availStart, availEnd } = form;
+      const payload = {
+        name: name.trim(),
+        type,
+        capacity: Number(capacity),
+        location: location.trim(),
+        availabilityHours: { start: availStart, end: availEnd },
+      };
+
       if (editId) {
-        await updateResource(
-          editId,
-          { resourceName: resourceName.trim(), capacity: Number(capacity), location: location.trim(), timeSlot },
-          token
-        );
+        await updateResource(editId, payload, token);
         showToast("Resource updated successfully.");
       } else {
-        const resourceId = generateResourceId();
-        await addResource(
-          { resourceId, resourceName: resourceName.trim(), capacity: Number(capacity), location: location.trim(), timeSlot },
-          token
-        );
+        await addResource(payload, token);
         showToast("Resource added successfully.");
       }
       setForm(EMPTY_FORM);
@@ -240,10 +246,12 @@ export default function AdminPage() {
     setError("");
     setEditId(r._id);
     setForm({
-      resourceName: r.resourceName,
-      capacity:     String(r.capacity),
-      location:     r.location || "",
-      timeSlot:     r.timeSlot || "",
+      name:       r.name       || "",
+      type:       r.type       || "",
+      capacity:   String(r.capacity),
+      location:   r.location   || "",
+      availStart: r.availabilityHours?.start || "",
+      availEnd:   r.availabilityHours?.end   || "",
     });
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -338,7 +346,7 @@ export default function AdminPage() {
         .btn-add-resource { font-family: var(--font-b); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; background: var(--navy); border: none; padding: 10px 20px; cursor: pointer; border-radius: 2px; transition: all 0.25s; display: flex; align-items: center; gap: 8px; }
         .btn-add-resource:hover { background: var(--navy-dk); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(15,31,92,0.28); }
 
-        .resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+        .resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
         .resource-card { background: var(--surface); padding: 28px 24px; position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 14px; transition: background 0.25s; animation: fadeUp 0.4s ease both; }
         .resource-card:hover { background: var(--navy-xs); }
         .resource-card.is-editing { background: #fffbeb; }
@@ -354,7 +362,14 @@ export default function AdminPage() {
         .rc-meta-item { display: flex; flex-direction: column; gap: 2px; }
         .rc-meta-label { font-size: 9px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
         .rc-meta-val { font-size: 13px; font-weight: 600; color: var(--ink2); }
-        .rc-timeslot { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--green); background: var(--green-lt); border: 1px solid rgba(21,128,61,0.2); padding: 4px 10px; border-radius: 999px; width: fit-content; }
+
+        /* Availability pill */
+        .rc-avail { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--green); background: var(--green-lt); border: 1px solid rgba(21,128,61,0.2); padding: 5px 12px; border-radius: 999px; width: fit-content; }
+        .rc-avail-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+
+        /* Type badge */
+        .rc-type-badge { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--navy); background: var(--navy-lt); padding: 3px 10px; border-radius: 999px; width: fit-content; }
+
         .rc-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 4px; }
         .btn-edit-card { flex: 1; padding: 9px; font-family: var(--font-b); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--navy); background: var(--navy-lt); border: 1px solid rgba(15,31,92,0.15); border-radius: 2px; cursor: pointer; transition: all 0.2s; }
         .btn-edit-card:hover { background: var(--navy); color: #fff; }
@@ -389,12 +404,9 @@ export default function AdminPage() {
         .form-input:focus { outline: none; border-color: var(--navy); }
         .form-hint { font-size: 11px; color: var(--muted); }
 
-        /* Time slot picker */
-        .timeslot-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-        .timeslot-btn { padding: 8px 4px; font-family: var(--font-b); font-size: 10.5px; font-weight: 600; text-align: center; border: 1px solid var(--border); border-radius: 2px; background: #fff; color: var(--ink2); cursor: pointer; transition: all 0.15s; line-height: 1.2; }
-        .timeslot-btn:hover { border-color: var(--navy); color: var(--navy); background: var(--navy-xs); }
-        .timeslot-btn.selected { background: var(--navy); color: #fff; border-color: var(--navy); }
-        .timeslot-selected-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--green); background: var(--green-lt); border: 1px solid rgba(21,128,61,0.2); padding: 5px 12px; border-radius: 999px; margin-top: 8px; }
+        /* Time row — two inputs side by side */
+        .time-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 10px; }
+        .time-row-sep { font-size: 13px; color: var(--muted); padding-bottom: 12px; text-align: center; }
 
         .btn-submit { width: 100%; padding: 13px; font-family: var(--font-b); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #fff; background: var(--navy); border: none; border-radius: 2px; cursor: pointer; transition: all 0.2s; }
         .btn-submit:hover:not(:disabled) { background: var(--navy-dk); transform: translateY(-1px); }
@@ -435,7 +447,8 @@ export default function AdminPage() {
           .stats-row { grid-template-columns: repeat(2,1fr); }
           .analytics-stats { grid-template-columns: 1fr; }
           .resource-grid { grid-template-columns: 1fr; }
-          .timeslot-grid { grid-template-columns: repeat(3, 1fr); }
+          .time-row { grid-template-columns: 1fr; }
+          .time-row-sep { display: none; }
         }
       `}</style>
 
@@ -459,6 +472,7 @@ export default function AdminPage() {
 
         {error && !showForm && <div className="alert error">⚠ {error}</div>}
 
+        {/* ── Stats row ── */}
         <div className="stats-row">
           <div className="stat-card">
             <div className="stat-label">Total Resources</div>
@@ -482,6 +496,7 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* ── Resources section ── */}
         <div className="section-head">
           <div className="section-title-wrap">
             <span className="section-eyebrow">Resources</span>
@@ -501,13 +516,26 @@ export default function AdminPage() {
         ) : (
           <div className="resource-grid">
             {resources.map((r, i) => (
-              <div className={`resource-card${editId === r._id ? " is-editing" : ""}`} key={r._id} style={{ animationDelay: `${i * 0.04}s` }}>
+              <div
+                className={`resource-card${editId === r._id ? " is-editing" : ""}`}
+                key={r._id}
+                style={{ animationDelay: `${i * 0.04}s` }}
+              >
                 <div className="resource-card-bar" />
+
+                {/* Top row: icon + resource ID */}
                 <div className="rc-top">
-                  <div className="rc-icon">{getIcon(r.resourceName)}</div>
+                  <div className="rc-icon">{getIcon(r.type)}</div>
                   <span className="rc-id">{r.resourceId}</span>
                 </div>
-                <div className="rc-name">{r.resourceName}</div>
+
+                {/* Name */}
+                <div className="rc-name">{r.name}</div>
+
+                {/* Type badge */}
+                {r.type && <div className="rc-type-badge">{r.type}</div>}
+
+                {/* Capacity + Location */}
                 <div className="rc-meta">
                   {r.capacity && (
                     <div className="rc-meta-item">
@@ -522,12 +550,25 @@ export default function AdminPage() {
                     </div>
                   )}
                 </div>
-                {r.timeSlot && <div className="rc-timeslot">🕐 {r.timeSlot}</div>}
+
+                {/* Availability hours */}
+                {r.availabilityHours?.start && r.availabilityHours?.end && (
+                  <div className="rc-avail">
+                    <div className="rc-avail-dot" />
+                    Available {formatTime(r.availabilityHours.start)} – {formatTime(r.availabilityHours.end)}
+                  </div>
+                )}
+
+                {/* Actions */}
                 <div className="rc-actions">
                   <button className="btn-edit-card" onClick={() => handleEdit(r)}>
                     {editId === r._id ? "Editing…" : "Edit"}
                   </button>
-                  <button className="btn-delete-card" onClick={() => handleDelete(r._id)} disabled={deletingId === r._id}>
+                  <button
+                    className="btn-delete-card"
+                    onClick={() => handleDelete(r._id)}
+                    disabled={deletingId === r._id}
+                  >
                     {deletingId === r._id ? "…" : "Delete"}
                   </button>
                 </div>
@@ -536,6 +577,7 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ── Analytics section ── */}
         <div className="section-head" style={{ marginTop: 56 }}>
           <div className="section-title-wrap">
             <span className="section-eyebrow">Analytics</span>
@@ -581,7 +623,9 @@ export default function AdminPage() {
                 <div className="chart-card-sub">Bookings by time slot</div>
               </div>
               <div className="chart-card-body">
-                {analyticsLoad ? <div className="spinner" style={{ margin: "24px auto" }} /> : <PeakHoursChart peakHours={analytics?.peakHours} />}
+                {analyticsLoad
+                  ? <div className="spinner" style={{ margin: "24px auto" }} />
+                  : <PeakHoursChart peakHours={analytics?.peakHours} />}
               </div>
             </div>
             <div className="chart-card">
@@ -591,7 +635,9 @@ export default function AdminPage() {
                 <div className="chart-card-sub">Ranked by booking count</div>
               </div>
               <div className="chart-card-body">
-                {analyticsLoad ? <div className="spinner" style={{ margin: "24px auto" }} /> : <PopularResourcesChart resources={analytics?.popularResources} />}
+                {analyticsLoad
+                  ? <div className="spinner" style={{ margin: "24px auto" }} />
+                  : <PopularResourcesChart resources={analytics?.popularResources} />}
               </div>
             </div>
           </div>
@@ -603,62 +649,123 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* ADD / EDIT MODAL */}
+      {/* ── ADD / EDIT MODAL ── */}
       {showForm && (
         <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && handleCancelEdit()}>
           <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <div className={`modal-bar${editId ? " editing" : ""}`} />
+
             <div className="modal-header">
               <div className="modal-title" id="modal-title">
                 {editId ? "✏ Edit Resource" : "+ Add Resource"}
               </div>
               <div className="modal-subtitle">
-                {editId ? "Update details below. Resource ID is fixed." : "ID is auto-generated — just fill in the details."}
+                {editId
+                  ? "Update details below. Resource ID is fixed."
+                  : "Fill in the details — Resource ID is auto-generated."}
               </div>
             </div>
+
             <form onSubmit={handleSubmit} noValidate>
               <div className="modal-body">
                 {error && <div className="alert error" style={{ marginBottom: 16 }}>⚠ {error}</div>}
 
+                {/* Resource Name */}
                 <div className="form-group">
                   <label className="form-label">Resource Name <span>*</span></label>
-                  <input className="form-input" name="resourceName" value={form.resourceName} onChange={handleChange} placeholder="e.g. Physics Laboratory" autoFocus />
+                  <input
+                    className="form-input"
+                    name="name"
+                    value={form.name}
+                    onChange={handleChange}
+                    placeholder="e.g. Physics Laboratory"
+                    autoFocus
+                  />
                 </div>
 
+                {/* Type */}
+                <div className="form-group">
+                  <label className="form-label">Type <span>*</span></label>
+                  <select className="form-input" name="type" value={form.type} onChange={handleChange}>
+                    <option value="">Select type…</option>
+                    {RESOURCE_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Capacity */}
                 <div className="form-group">
                   <label className="form-label">Capacity <span>*</span></label>
-                  <input className="form-input" name="capacity" type="number" min="1" max="10000" value={form.capacity} onChange={handleChange} placeholder="e.g. 30" />
+                  <input
+                    className="form-input"
+                    name="capacity"
+                    type="number"
+                    min="1"
+                    max="10000"
+                    value={form.capacity}
+                    onChange={handleChange}
+                    placeholder="e.g. 30"
+                  />
                 </div>
 
+                {/* Location */}
                 <div className="form-group">
                   <label className="form-label">Location</label>
-                  <input className="form-input" name="location" value={form.location} onChange={handleChange} placeholder="e.g. Block A, Floor 2" />
+                  <input
+                    className="form-input"
+                    name="location"
+                    value={form.location}
+                    onChange={handleChange}
+                    placeholder="e.g. Block A, Floor 2"
+                  />
                 </div>
 
+                {/* Availability Hours — two time inputs side by side */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Time Slot <span>*</span></label>
-                  <div className="timeslot-grid">
-                    {TIME_SLOTS.map(slot => (
-                      <button
-                        key={slot}
-                        type="button"
-                        className={`timeslot-btn${form.timeSlot === slot ? " selected" : ""}`}
-                        onClick={() => { setError(""); setForm(f => ({ ...f, timeSlot: slot })); }}
-                      >
-                        {slot}
-                      </button>
-                    ))}
+                  <label className="form-label">Availability Hours <span>*</span></label>
+                  <div className="time-row">
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>From</span>
+                      <input
+                        className="form-input"
+                        name="availStart"
+                        type="time"
+                        value={form.availStart}
+                        onChange={handleChange}
+                      />
+                    </div>
+                    <div className="time-row-sep">→</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>To</span>
+                      <input
+                        className="form-input"
+                        name="availEnd"
+                        type="time"
+                        value={form.availEnd}
+                        onChange={handleChange}
+                      />
+                    </div>
                   </div>
-                  {form.timeSlot && (
-                    <div className="timeslot-selected-badge">✓ {form.timeSlot}</div>
-                  )}
+                  <p className="form-hint" style={{ marginTop: 8 }}>
+                    Students can book any slot within this window. e.g. 09:00 → 17:00
+                  </p>
                 </div>
               </div>
+
               <div className="modal-footer">
-                <button type="submit" className={`btn-submit${editId ? " editing" : ""}`} disabled={submitting}>
-                  {submitting ? (editId ? "Updating…" : "Adding…") : (editId ? "Update Resource →" : "Add Resource →")}
+                <button
+                  type="submit"
+                  className={`btn-submit${editId ? " editing" : ""}`}
+                  disabled={submitting}
+                >
+                  {submitting
+                    ? (editId ? "Updating…" : "Adding…")
+                    : (editId ? "Update Resource →" : "Add Resource →")}
                 </button>
-                <button type="button" className="btn-cancel-modal" onClick={handleCancelEdit}>Cancel</button>
+                <button type="button" className="btn-cancel-modal" onClick={handleCancelEdit}>
+                  Cancel
+                </button>
               </div>
             </form>
           </div>
