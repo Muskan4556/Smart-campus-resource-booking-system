@@ -49,7 +49,6 @@ function getIcon(type = "") {
   return RESOURCE_ICONS[type] || RESOURCE_ICONS.default;
 }
 
-// Format time "09:00" → "9:00 AM"
 function formatTime(t) {
   if (!t) return "";
   const [h, m] = t.split(":").map(Number);
@@ -278,6 +277,17 @@ export default function AdminPage() {
     }
   };
 
+  // NEW: navigate to the resource bookings detail page
+  const handleViewBookings = (r) => {
+    navigate(`/admin/resources/${r._id}/bookings`, {
+      state: {
+        resourceName:     r.name     || "",
+        resourceType:     r.type     || "",
+        resourceLocation: r.location || "",
+      },
+    });
+  };
+
   const handleLogout = () => { localStorage.clear(); navigate("/"); };
 
   const analyticsPeak   = analytics?.peakHours?.reduce((a, b) => b.bookingCount > a.bookingCount ? b : a, analytics?.peakHours?.[0]);
@@ -363,17 +373,25 @@ export default function AdminPage() {
         .rc-meta-label { font-size: 9px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
         .rc-meta-val { font-size: 13px; font-weight: 600; color: var(--ink2); }
 
-        /* Availability pill */
         .rc-avail { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--green); background: var(--green-lt); border: 1px solid rgba(21,128,61,0.2); padding: 5px 12px; border-radius: 999px; width: fit-content; }
         .rc-avail-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
-
-        /* Type badge */
         .rc-type-badge { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--navy); background: var(--navy-lt); padding: 3px 10px; border-radius: 999px; width: fit-content; }
 
-        .rc-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 4px; }
-        .btn-edit-card { flex: 1; padding: 9px; font-family: var(--font-b); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--navy); background: var(--navy-lt); border: 1px solid rgba(15,31,92,0.15); border-radius: 2px; cursor: pointer; transition: all 0.2s; }
+        /* ── Resource card action buttons — now 3 buttons ── */
+        .rc-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 4px; flex-wrap: wrap; }
+        .btn-view-bookings {
+          flex: 1; min-width: 0; padding: 9px 8px;
+          font-family: var(--font-b); font-size: 11px; font-weight: 700;
+          letter-spacing: 0.06em; text-transform: uppercase;
+          color: #fff; background: var(--navy);
+          border: none; border-radius: 2px; cursor: pointer; transition: all 0.2s;
+          display: flex; align-items: center; justify-content: center; gap: 5px;
+          white-space: nowrap;
+        }
+        .btn-view-bookings:hover { background: var(--navy-dk); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(15,31,92,0.28); }
+        .btn-edit-card { flex: 1; min-width: 0; padding: 9px 8px; font-family: var(--font-b); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--navy); background: var(--navy-lt); border: 1px solid rgba(15,31,92,0.15); border-radius: 2px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
         .btn-edit-card:hover { background: var(--navy); color: #fff; }
-        .btn-delete-card { flex: 1; padding: 9px; font-family: var(--font-b); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--red); background: transparent; border: 1px solid rgba(192,57,43,0.25); border-radius: 2px; cursor: pointer; transition: all 0.2s; }
+        .btn-delete-card { flex: 1; min-width: 0; padding: 9px 8px; font-family: var(--font-b); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--red); background: transparent; border: 1px solid rgba(192,57,43,0.25); border-radius: 2px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
         .btn-delete-card:hover:not(:disabled) { background: var(--red-lt); }
         .btn-delete-card:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -404,7 +422,6 @@ export default function AdminPage() {
         .form-input:focus { outline: none; border-color: var(--navy); }
         .form-hint { font-size: 11px; color: var(--muted); }
 
-        /* Time row — two inputs side by side */
         .time-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 10px; }
         .time-row-sep { font-size: 13px; color: var(--muted); padding-bottom: 12px; text-align: center; }
 
@@ -523,19 +540,15 @@ export default function AdminPage() {
               >
                 <div className="resource-card-bar" />
 
-                {/* Top row: icon + resource ID */}
                 <div className="rc-top">
                   <div className="rc-icon">{getIcon(r.type)}</div>
                   <span className="rc-id">{r.resourceId}</span>
                 </div>
 
-                {/* Name */}
                 <div className="rc-name">{r.name}</div>
 
-                {/* Type badge */}
                 {r.type && <div className="rc-type-badge">{r.type}</div>}
 
-                {/* Capacity + Location */}
                 <div className="rc-meta">
                   {r.capacity && (
                     <div className="rc-meta-item">
@@ -551,7 +564,6 @@ export default function AdminPage() {
                   )}
                 </div>
 
-                {/* Availability hours */}
                 {r.availabilityHours?.start && r.availabilityHours?.end && (
                   <div className="rc-avail">
                     <div className="rc-avail-dot" />
@@ -559,8 +571,16 @@ export default function AdminPage() {
                   </div>
                 )}
 
-                {/* Actions */}
+                {/* ── Actions: View Bookings | Edit | Delete ── */}
                 <div className="rc-actions">
+                  {/* NEW: View Bookings button */}
+                  <button
+                    className="btn-view-bookings"
+                    onClick={() => handleViewBookings(r)}
+                    title="See all users who booked this resource"
+                  >
+                    👥 Bookings
+                  </button>
                   <button className="btn-edit-card" onClick={() => handleEdit(r)}>
                     {editId === r._id ? "Editing…" : "Edit"}
                   </button>
@@ -670,7 +690,6 @@ export default function AdminPage() {
               <div className="modal-body">
                 {error && <div className="alert error" style={{ marginBottom: 16 }}>⚠ {error}</div>}
 
-                {/* Resource Name */}
                 <div className="form-group">
                   <label className="form-label">Resource Name <span>*</span></label>
                   <input
@@ -683,7 +702,6 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {/* Type */}
                 <div className="form-group">
                   <label className="form-label">Type <span>*</span></label>
                   <select className="form-input" name="type" value={form.type} onChange={handleChange}>
@@ -694,7 +712,6 @@ export default function AdminPage() {
                   </select>
                 </div>
 
-                {/* Capacity */}
                 <div className="form-group">
                   <label className="form-label">Capacity <span>*</span></label>
                   <input
@@ -709,7 +726,6 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {/* Location */}
                 <div className="form-group">
                   <label className="form-label">Location</label>
                   <input
@@ -721,7 +737,6 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {/* Availability Hours — two time inputs side by side */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Availability Hours <span>*</span></label>
                   <div className="time-row">

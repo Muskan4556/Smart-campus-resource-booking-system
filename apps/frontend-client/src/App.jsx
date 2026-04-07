@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import BookingPage from "./pages/BookingPage";
 import LandingPage from "./pages/LandingPage";
 import AdminPage from "./pages/AdminPage";
+import ResourceBookingsPage from "./pages/ResourceBookingsPage";
 import ProtectedRoute, { AdminRoute } from "./components/ProtectedRoute";
 
 function App() {
@@ -27,6 +28,9 @@ function App() {
         {/* Admin only */}
         <Route path="/admin" element={
           <AdminRoute><AdminPage /></AdminRoute>
+        } />
+        <Route path="/admin/resources/:resourceId/bookings" element={
+          <AdminRoute><ResourceBookingsPage /></AdminRoute>
         } />
       </Routes>
     </Router>

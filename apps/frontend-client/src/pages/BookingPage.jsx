@@ -29,17 +29,47 @@ function formatTime(t) {
   return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
-function formatDate(d) {
+// FIX: Backend stores dates as DD-MM-YYYY (output of its formatDate()).
+// This helper handles BOTH "YYYY-MM-DD" (from <input type="date">)
+// and "DD-MM-YYYY" (returned by the backend) for display purposes.
+function formatDateDisplay(d) {
   if (!d) return "";
-  const [year, month, day] = d.split("-").map(Number);
+
+  let year, month, day;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    // Input format: YYYY-MM-DD
+    [year, month, day] = d.split("-").map(Number);
+  } else if (/^\d{2}-\d{2}-\d{4}$/.test(d)) {
+    // Backend stored format: DD-MM-YYYY
+    [day, month, year] = d.split("-").map(Number);
+  } else {
+    return d; // Unknown format — return as-is
+  }
+
   const date = new Date(year, month - 1, day);
   if (isNaN(date.getTime())) return d;
-  return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function todayString() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// FIX: Converts DD-MM-YYYY (backend) → YYYY-MM-DD for comparison with todayString()
+function normalizeDateForComparison(d) {
+  if (!d) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d; // Already YYYY-MM-DD
+  if (/^\d{2}-\d{2}-\d{4}$/.test(d)) {
+    const [day, month, year] = d.split("-");
+    return `${year}-${month}-${day}`;
+  }
+  return d;
 }
 
 function extractTime(val) {
@@ -125,7 +155,9 @@ export default function BookingPage() {
 
   useEffect(() => { fetchMyBookings(); }, [fetchMyBookings]);
 
-  // Fetch booked slots for selected resource + date
+  // FIX: Fetch booked slots — backend route is GET /bookings/resource/:resourceId?date=<date>
+  // The backend's formatDate() will convert the YYYY-MM-DD we send into DD-MM-YYYY for querying.
+  // We pass date as YYYY-MM-DD (straight from the date input) — the backend handles conversion.
   useEffect(() => {
     if (!selectedResource || !date) { setExistingSlots([]); return; }
     setSlotsLoading(true);
@@ -182,7 +214,7 @@ export default function BookingPage() {
     return errs;
   };
 
-  // ── Overlap check ─────────────────────────────────────────────────────────
+  // ── Overlap check (client-side, before sending to backend) ────────────────
   const checkOverlap = () => {
     if (!startTime || !endTime || !existingSlots.length) return null;
     for (const slot of existingSlots) {
@@ -212,21 +244,25 @@ export default function BookingPage() {
 
     setLoading(true);
     try {
+      // FIX: Payload keys match exactly what bookingRoute.js destructures:
+      // { userId, resourceId, date, startTime, endTime }
+      // Plus fallback fields the backend uses if service calls fail:
+      // { userEmail, userName, resourceName }
       const payload = {
         userId,
         resourceId:   selectedResource,
-        date,
+        date,                              // YYYY-MM-DD — backend formatDate() converts it
         startTime,
         endTime,
         userEmail,
         userName,
-        resourceName: selectedRes?.name || "",
+        resourceName: selectedRes?.name ?? "", // FIX: guard against undefined
       };
 
       await bookResource(payload, token);
 
       setSuccessMsg(
-        `Booking confirmed for ${formatDate(date)}, ${formatTime(startTime)} – ${formatTime(endTime)}.`
+        `Booking confirmed for ${formatDateDisplay(date)}, ${formatTime(startTime)} – ${formatTime(endTime)}.`
       );
       setSelectedResource("");
       setDate("");
@@ -256,13 +292,27 @@ export default function BookingPage() {
   };
 
   // ── Cancel booking ────────────────────────────────────────────────────────
+  // FIX: After delete, also invalidate existingSlots if the cancelled booking
+  // matches the currently selected resource+date (matches backend Redis invalidation).
   const handleDelete = async (id) => {
     if (!window.confirm("Cancel this booking? This cannot be undone.")) return;
     setDeleteError("");
     setDeletingId(id);
     try {
+      const cancelled = bookings.find(b => b._id === id);
       await cancelBooking(id, token);
       setBookings(prev => prev.filter(b => b._id !== id));
+
+      // Refresh slots preview if the cancelled booking was for the currently viewed resource+date
+      if (
+        cancelled &&
+        String(cancelled.resourceId) === String(selectedResource) &&
+        normalizeDateForComparison(cancelled.date) === date
+      ) {
+        getResourceBookings(selectedResource, date, token)
+          .then(res => setExistingSlots(Array.isArray(res.data) ? res.data : []))
+          .catch(() => {});
+      }
     } catch (e) {
       setDeleteError(e?.response?.data?.message || e?.message || "Failed to cancel booking.");
     } finally {
@@ -277,7 +327,6 @@ export default function BookingPage() {
     navigate("/");
   };
 
-  // Uses r.name (updated model field)
   const getResourceName = (resourceId) => {
     if (!resourceId) return "Unknown Resource";
     const found = resources.find(r => String(r._id) === String(resourceId));
@@ -396,7 +445,7 @@ export default function BookingPage() {
         .form-error { font-size: 11px; color: var(--db-error); display: flex; align-items: center; gap: 4px; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
-        /* ── Availability pill shown after selecting a resource ── */
+        /* ── Availability pill ── */
         .avail-pill {
           display: flex; align-items: center; gap: 8px;
           font-size: 12px; font-weight: 600; color: var(--db-success);
@@ -406,7 +455,7 @@ export default function BookingPage() {
         .avail-pill-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--db-success); flex-shrink: 0; }
         .avail-pill-hint { color: var(--db-muted); font-weight: 400; font-size: 11px; }
 
-        /* ── Resource info card shown after selecting ── */
+        /* ── Resource info card ── */
         .resource-info-card {
           background: var(--db-navy-xs); border: 1px solid var(--db-border);
           border-radius: 2px; padding: 12px 14px; margin-bottom: 20px;
@@ -593,7 +642,6 @@ export default function BookingPage() {
 
                 {fieldErrors.resource && <span className="form-error">⚠ {fieldErrors.resource}</span>}
 
-                {/* Availability pill — shown once a resource is selected */}
                 {selectedRes && (
                   availMin && availMax ? (
                     <div className="avail-pill">
@@ -609,7 +657,7 @@ export default function BookingPage() {
                 )}
               </div>
 
-              {/* Resource detail strip — type, capacity, location */}
+              {/* Resource detail strip */}
               {selectedRes && (
                 <div className="resource-info-card">
                   {selectedRes.type && (
@@ -650,7 +698,7 @@ export default function BookingPage() {
                 {fieldErrors.date && <span className="form-error">⚠ {fieldErrors.date}</span>}
               </div>
 
-              {/* Existing bookings preview for selected resource + date */}
+              {/* Existing bookings preview */}
               {selectedResource && date && (
                 <div className="slots-preview">
                   <div className="slots-preview-title">
@@ -743,18 +791,22 @@ export default function BookingPage() {
             ) : (
               [...bookings]
                 .sort((bA, bB) => {
-                  if (bA.date === bB.date)
+                  // FIX: normalize DD-MM-YYYY → YYYY-MM-DD before string comparison
+                  const dA = normalizeDateForComparison(bA.date);
+                  const dB = normalizeDateForComparison(bB.date);
+                  if (dA === dB)
                     return (bA.startTime || "") < (bB.startTime || "") ? -1 : 1;
-                  return bA.date < bB.date ? -1 : 1;
+                  return dA < dB ? -1 : 1;
                 })
                 .map(b => {
-                  const isPast   = b.date < today;
-                  const isToday  = b.date === today;
+                  // FIX: compare using normalized YYYY-MM-DD
+                  const normalizedDate = normalizeDateForComparison(b.date);
+                  const isPast   = normalizedDate < today;
+                  const isToday  = normalizedDate === today;
                   const dotClass = isPast ? "past" : isToday ? "today" : "future";
                   const startStr = extractTime(b.startTime);
                   const endStr   = extractTime(b.endTime);
 
-                  // Look up full resource to get name, type, location
                   const res = resources.find(r => String(r._id) === String(b.resourceId));
 
                   return (
@@ -765,7 +817,8 @@ export default function BookingPage() {
                           {res ? res.name : getResourceName(b.resourceId)}
                         </div>
                         <div className="booking-meta">
-                          <span className="booking-date-badge">{formatDate(b.date)}</span>
+                          {/* FIX: use formatDateDisplay which handles DD-MM-YYYY from backend */}
+                          <span className="booking-date-badge">{formatDateDisplay(b.date)}</span>
                           {startStr && endStr
                             ? `${formatTime(startStr)} – ${formatTime(endStr)}`
                             : b.date}
